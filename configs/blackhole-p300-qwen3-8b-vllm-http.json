@@ -1,0 +1,69 @@
+{
+  "setup_id": "blackhole-p300-qwen3-8b-vllm-http",
+  "backend": "vllm",
+  "model": "Qwen/Qwen3-8B",
+  "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "max_model_len": 40960,
+    "max_num_seqs": 32,
+    "max_num_batched_tokens": 40960,
+    "block_size": 64,
+    "additional_config": {
+      "tt": {}
+    }
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "tenstorrent",
+    "device": "blackhole P300"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8001",
+    "metadata_path": "results/servers/blackhole-p300-qwen3-8b-vllm-http.json",
+    "timeout_seconds": 1800,
+    "return_token_ids": false
+  },
+  "launch": {
+    "startup_timeout_seconds": 3600,
+    "env": {
+      "VLLM_CONFIGURE_LOGGING": "1",
+      "VLLM_RPC_TIMEOUT": "900000",
+      "VLLM_TARGET_DEVICE": "tt",
+      "TORCHDYNAMO_DISABLE": "1",
+      "MESH_DEVICE": "P300",
+      "ARCH_NAME": "blackhole"
+    }
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "upstream_model_status": "FUNCTIONAL",
+    "vendor_container": "ghcr.io/tenstorrent/tt-inference-server/vllm-tt-metal-src-release-ubuntu-22.04-amd64:0.10.0-e867533-22be241",
+    "system_requirements": {
+      "firmware": {
+        "specifier": ">=19.2.0",
+        "mode": "STRICT"
+      },
+      "kmd": {
+        "specifier": ">=2.5.0",
+        "mode": "STRICT"
+      }
+    },
+    "note": "Separate Qwen3-8B experiment. Qwen3.5-0.8B is absent from this upstream release registry. N150/P300 are explicit board examples, not detection of the user hardware. Internal TT precision must be checked on the serving host."
+  }
+}

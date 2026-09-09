@@ -17,10 +17,11 @@ def environment_metadata():
             packages[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
             pass
-    gpu = subprocess.run(["nvidia-smi", "--query-gpu=name,uuid,memory.total,driver_version,compute_cap",
-                          "--format=csv,noheader"], capture_output=True, text=True)
+    from .hardware import command_output
+    gpu = command_output(["nvidia-smi", "--query-gpu=name,uuid,memory.total,driver_version,compute_cap",
+                          "--format=csv,noheader"])
     return {"python": platform.python_version(), "platform": platform.platform(), "packages": packages,
-            "nvidia_smi": gpu.stdout.strip(), "nvidia_smi_error": gpu.stderr.strip()}
+            "nvidia_smi": gpu.get("stdout", ""), "nvidia_smi_error": gpu.get("stderr", "")}
 
 
 def render_prompt(tokenizer, row, config):
@@ -70,6 +71,8 @@ def prepare(config_path, workload_names, limit=None):
 
 def run(config_path, output_dir, workload_names, limit=None, resume=False, preflight=False):
     config, tokenizer, rows, sources = prepare(config_path, workload_names, limit)
+    from .hardware import validate_target
+    validate_target(config)
     max_input = max(len(row["input_ids"]) for row in rows)
     max_total = max_input + config["generation"]["max_tokens"]
     print(f"Prepared {len(rows)} prompts; longest input={max_input}; required context={max_total}", flush=True)
@@ -84,6 +87,9 @@ def run(config_path, output_dir, workload_names, limit=None, resume=False, prefl
     import fcntl
     with (outdir / ".run.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if config.get("transport", "offline") == "http":
+            from .http_inference import run_http
+            return run_http(config, rows, sources, outdir, resume)
         return _run_locked(config, rows, sources, outdir, resume)
 
 
@@ -131,6 +137,14 @@ def _run_locked(config, rows, sources, outdir, resume):
     try:
         import torch
         from vllm import LLM, SamplingParams
+        if config.get("hardware", {}).get("vendor") == "amd":
+            from .hardware import discover, require_hardware
+            hardware = discover()
+            require_hardware("amd", hardware)
+            if manifest["environment"].get("rocm") not in (None, hardware):
+                raise ValueError("Resume refused: ROCm serving environment changed")
+            manifest["environment"]["rocm"] = hardware
+            manifest["environment"]["rocm_runtime"] = torch.version.hip
         manifest["environment"].update(cuda_runtime=torch.version.cuda,
                                        gpu_name=torch.cuda.get_device_name(0),
                                        gpu_capability=list(torch.cuda.get_device_capability(0)))

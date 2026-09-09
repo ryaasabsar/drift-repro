@@ -92,3 +92,16 @@ def test_code_execution_hosts_must_match(tmp_path):
         write_json(directory / "evaluation.json", evaluation)
     with pytest.raises(ValueError, match="Evaluators differ.*execution_environment"):
         compare_runs(a, b, tmp_path / "comparison", allow_confounded=True)
+
+
+def test_missing_token_ids_are_not_zero_drift(tmp_path):
+    a = make_run(tmp_path / "a", ["1"], [True])
+    b = make_run(tmp_path / "b", ["1"], [True])
+    for directory in (a, b):
+        row = json.loads((directory / "math.jsonl").read_text())
+        row["output_token_ids"] = None
+        (directory / "math.jsonl").write_text(json.dumps(row) + "\n")
+    report = compare_runs(a, b, tmp_path / "comparison")
+    assert report["records"][0]["token_sequence_changed"] is None
+    assert report["workloads"]["math"]["token_comparable_pairs"] == 0
+    assert report["workloads"]["math"]["token_change_rate"] is None

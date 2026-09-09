@@ -4,13 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "driftbench-runner"
-version = "0.1.0"
+version = "0.2.0"
 description = "Fresh inference and paired evaluation on the published DriftBench workloads"
 requires-python = ">=3.10"
 dependencies = []
 
 [project.optional-dependencies]
+client = ["transformers>=4.57.6,<5", "huggingface-hub>=0.36,<1"]
 nvidia = ["vllm==0.17.1"]
+sglang = ["sglang==0.5.10.post1"]
 evaluation = ["sentence-transformers>=3.3,<6", "accelerate>=1,<2"]
 test = ["pytest>=8,<10"]
 

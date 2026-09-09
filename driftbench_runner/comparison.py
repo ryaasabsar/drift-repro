@@ -28,6 +28,10 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
         if metadata["status"] != "complete" or len(outputs) != metadata["expected_records"]:
             raise ValueError("Finish inference before comparison")
     confounds = []
+    if baseline_meta.get("scheduling", "offline_batches") != candidate_meta.get("scheduling", "offline_batches"):
+        confounds.append("request_scheduling")
+    if baseline_meta["config"].get("launch") != candidate_meta["config"].get("launch"):
+        confounds.append("launch_settings")
     for field in ("model", "revision", "generation", "prompt_format", "chat_template_kwargs", "seed", "batch_size", "batch_size_by_workload"):
         if baseline_meta["config"].get(field) != candidate_meta["config"].get(field):
             confounds.append(field)
@@ -44,8 +48,9 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
                    if baseline_meta["config"]["engine"].get(k) != candidate_meta["config"]["engine"].get(k)}
     if set(engine_diff) - {"dtype"}:
         confounds.append("engine_parameters")
-    for field in ("packages", "cuda_runtime"):
-        if baseline_meta["environment"].get(field) != candidate_meta["environment"].get(field):
+    for field in ("packages", "cuda_runtime", "rocm_runtime", "package_sources", "source_revisions"):
+        default = {} if field in ("package_sources", "source_revisions") else None
+        if baseline_meta["environment"].get(field, default) != candidate_meta["environment"].get(field, default):
             confounds.append(f"environment_{field}")
     if len(changed_factors) > 1:
         confounds.append("multiple_setup_factors")
@@ -66,7 +71,8 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
                "text_changed": a["output_text"] != b["output_text"],
                "token_sequence_changed": a["output_token_ids"] != b["output_token_ids"] if
                baseline_meta["config"]["model"] == candidate_meta["config"]["model"] and
-               baseline_meta["config"]["revision"] == candidate_meta["config"]["revision"] else None,
+               baseline_meta["config"]["revision"] == candidate_meta["config"]["revision"] and
+               a.get("output_token_ids") is not None and b.get("output_token_ids") is not None else None,
                "baseline_output_sha256": digest(a["output_text"]), "candidate_output_sha256": digest(b["output_text"]),
                "label_flip": None, "baseline_label": None, "candidate_label": None,
                "baseline_length_limited": a["finish_reason"] == "length",
@@ -115,8 +121,11 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
         flips = sum(r["label_flip"] for r in labels)
         semantic_rows = [r for r in rows if "semantic_shift" in r]
         semantic_flips = sum(r["substantial_semantic_drift"] for r in semantic_rows)
+        token_pairs = [r for r in rows if r["token_sequence_changed"] is not None]
         summary[workload] = {"paired": len(rows), "text_changes": sum(r["text_changed"] for r in rows),
                              "text_change_rate": sum(r["text_changed"] for r in rows) / len(rows),
+                             "token_comparable_pairs": len(token_pairs),
+                             "token_change_rate": sum(r["token_sequence_changed"] for r in token_pairs) / len(token_pairs) if token_pairs else None,
                              "scored_pairs": len(labels), "unscored_pairs": len(rows) - len(labels),
                              "label_flips": flips if labels else None,
                              "flip_rate": flips / len(labels) if labels else None,

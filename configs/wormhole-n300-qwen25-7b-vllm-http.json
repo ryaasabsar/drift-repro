@@ -1,0 +1,62 @@
+{
+  "setup_id": "wormhole-n300-qwen25-7b-vllm-http",
+  "backend": "vllm",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "max_model_len": 32768,
+    "max_num_seqs": 32,
+    "max_num_batched_tokens": 40960,
+    "block_size": 64,
+    "additional_config": {
+      "tt": {
+        "trace_region_size": 60000000
+      }
+    }
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "tenstorrent",
+    "device": "Wormhole N300"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8001",
+    "metadata_path": "results/servers/wormhole-n300-qwen25-7b-vllm-http.json",
+    "timeout_seconds": 1800,
+    "return_token_ids": false
+  },
+  "launch": {
+    "startup_timeout_seconds": 3600,
+    "env": {
+      "VLLM_CONFIGURE_LOGGING": "1",
+      "VLLM_RPC_TIMEOUT": "900000",
+      "VLLM_TARGET_DEVICE": "tt",
+      "TORCHDYNAMO_DISABLE": "1",
+      "VLLM_ALLOW_LONG_MAX_MODEL_LEN": 1,
+      "WH_ARCH_YAML": "wormhole_b0_80_arch_eth_dispatch.yaml",
+      "MESH_DEVICE": "N300",
+      "ARCH_NAME": "wormhole_b0"
+    }
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "note": "Ungated Qwen2.5 model. N300 is an explicit board example; verify board, firmware and TT kernel support on the target host.",
+    "vendor_vllm_container": "ghcr.io/tenstorrent/tt-inference-server/vllm-tt-metal-src-release-ubuntu-22.04-amd64:0.9.0-5b5db8a-e771fff"
+  }
+}

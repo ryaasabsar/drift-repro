@@ -6,6 +6,11 @@ from .common import ROOT, WORKLOADS
 def main():
     parser = argparse.ArgumentParser(description="Run and compare the five published DriftBench workloads")
     sub = parser.add_subparsers(dest="command", required=True)
+    serve = sub.add_parser("serve", help="Launch in the serving framework's Python environment")
+    serve.add_argument("--config", required=True)
+    serve.add_argument("--dry-run", action="store_true", help="Print argv without loading models or accessing GPUs")
+    doctor = sub.add_parser("doctor", help="Inspect accelerators and framework versions on this host")
+    doctor.add_argument("--output")
     for name in ("run", "preflight"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--config", default=str(ROOT / "configs/rtx3060-qwen35-vllm.json"))
@@ -31,7 +36,17 @@ def main():
     judge.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
     judge.add_argument("--output", required=True)
     args = parser.parse_args()
-    if args.command in ("run", "preflight"):
+    if args.command == "serve":
+        from .serving import serve
+        serve(args.config, args.dry_run)
+    elif args.command == "doctor":
+        from .hardware import discover
+        from .common import write_json
+        result = discover()
+        if args.output:
+            write_json(args.output, result)
+        print(json.dumps(result, indent=2))
+    elif args.command in ("run", "preflight"):
         from .inference import run
         result = run(args.config, getattr(args, "output", ""), args.workloads, args.limit,
                      getattr(args, "resume", False), args.command == "preflight")

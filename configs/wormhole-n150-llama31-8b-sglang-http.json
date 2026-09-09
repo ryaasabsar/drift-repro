@@ -1,0 +1,55 @@
+{
+  "setup_id": "wormhole-n150-llama31-8b-sglang-http",
+  "backend": "sglang",
+  "model": "meta-llama/Llama-3.1-8B-Instruct",
+  "revision": "0e9e39f249a16976918f6564b8830bc894c89659",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "max_model_len": 32768,
+    "max_running_requests": 16,
+    "page_size": 128,
+    "tt_visible_devices": "(0)",
+    "mesh_shape": "1,1",
+    "disable_overlap_schedule": true,
+    "disable_radix_cache": true
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "tenstorrent",
+    "device": "Wormhole N150"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8002",
+    "metadata_path": "results/servers/wormhole-n150-llama31-8b-sglang-http.json",
+    "timeout_seconds": 1800
+  },
+  "launch": {
+    "command_prefix": [
+      "sglang-tt-server"
+    ],
+    "startup_timeout_seconds": 3600,
+    "env": {
+      "ARCH_NAME": "wormhole_b0",
+      "MESH_DEVICE": "N150"
+    }
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "note": "Upstream documented Llama3.1-8B example; requires approved Hugging Face access. Not a Qwen3.5 replacement. Blackhole SGLang is not established by the plugin README."
+  }
+}

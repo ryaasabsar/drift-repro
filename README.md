@@ -6,6 +6,8 @@ This is an adaptation of the [MLSys 2026 DriftBench experiment](https://openrevi
 
 The full RTX 3060 baseline is complete: **2,284 responses saved and all 1,284 objective responses evaluated**. The 1,000 chat responses are ready for a future paired comparison. See the [results report](docs/results.md), [validation](docs/validation.md), and [portable bundle](results/driftbench-rtx3060-bundle.tar.gz).
 
+**Multiple serving frameworks:** NVIDIA vLLM, SGLang and TensorRT-LLM now have real workload validation, saved responses and two paired comparison reports. AMD and Tenstorrent profiles are prepared; physical validation awaits access. See the [platform guide](docs/platforms.md), [framework validation](docs/framework-validation.md), and [updated bundle](results/driftbench-multiplatform-bundle.tar.gz).
+
 | Workload | Published inputs used here | Evaluation |
 |---|---:|---|
 | HumanEval / code | 164 | Execute tests; one greedy completion, pass@1 |
@@ -61,7 +63,7 @@ python -m driftbench_runner evaluate results/rtx3060-qwen35-vllm --code \
   --safety-labels results/rtx3060-qwen35-vllm/safety-labels.jsonl
 ```
 
-`--workloads code math` selects workloads. `--limit N` selects the first N from each file and is always recorded as a subset. No requests go to a hosted inference API.
+`--workloads code math` selects workloads. `--limit N` selects the first N from each file and is always recorded as a subset. Offline profiles load the model locally. HTTP profiles send requests to the endpoint explicitly configured in `server.base_url`.
 
 The full-run profile batches 16 requests for code, math, safety and chat, with 2,048 prefill tokens per engine iteration. Long-context requests run one at a time. Both profiles preserve greedy decoding and the 512-token response cap. Batch membership is fixed within each workload and preserved on resume. The matching A100 batch-16 profile must be used when comparing to this full run; the single-sequence smoke profile is a different experiment.
 
@@ -97,7 +99,7 @@ This reports correctness/safety label flips, direction of flips, Wilson 95% conf
 
 For a hardware comparison, **evaluate both runs on the same evaluation machine**. HumanEval records its Python/CPU environment and resource limits; workers use random and hash seeds of 42. The safety judge's hardware and library versions are also recorded and must match: running the judge on each target GPU could itself introduce classification drift. You can transfer the A100 inference directory to the 3060 machine and run `judge-safety` and `evaluate --code` for both there, or use the small judge with `--device cpu` for both on a common CPU host. Keep alternate judge outputs in separate files.
 
-vLLM is the implemented inference backend. Other GPUs, models and serving frameworks can be added behind the same output schema; AMD, Tenstorrent, TensorRT-LLM and SGLang have not been validated by this project yet. The pretrained paper PRI predictor is not used to invent drift estimates for this new model/GPU combination.
+The runner now has HTTP adapters and launch profiles for vLLM, SGLang and TensorRT-LLM, plus AMD ROCm and Tenstorrent vendor environments. See [platform setup and validation status](docs/platforms.md). AMD and Tenstorrent hardware validation is pending access to those machines. The pretrained paper PRI predictor is not used to invent drift estimates for this new model/GPU combination.
 
 ## Results
 
@@ -108,7 +110,7 @@ Each run directory contains:
 - `safety-labels.jsonl`: separate, resumable judge outputs with model/revision and response hashes.
 - `evaluation.json` and `summary.csv`: per-prompt scores, workload summaries, missing/pending counts and length-limited responses.
 
-Comparison directories contain `comparison.json` (including every paired result) and `comparison.csv`. Fractions are in [0, 1]. Inference uses vLLM's offline serving engine; the recorded batch durations are not HTTP serving throughput, TTFT or a concurrency stress test. The first warmup is excluded from measurement.
+Comparison directories contain `comparison.json` (including every paired result) and `comparison.csv`. Fractions are in [0, 1]. The original baseline uses vLLM's offline engine. New HTTP runs preserve per-request latency, raw server responses, serving-host provenance and client batching metadata. Neither path measures TTFT; offline batch times and HTTP request latency have different meanings. The first warmup is excluded from measurement.
 
 ```bash
 python -m pytest -q

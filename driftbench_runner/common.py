@@ -88,6 +88,8 @@ def local_environment():
         "HF_HOME": ".cache/huggingface", "XDG_CACHE_HOME": ".cache",
         "VLLM_CACHE_ROOT": ".cache/vllm", "TRITON_CACHE_DIR": ".cache/triton",
         "TORCHINDUCTOR_CACHE_DIR": ".cache/torchinductor",
+        "TVM_FFI_CACHE_DIR": ".cache/tvm-ffi", "FLASHINFER_WORKSPACE_BASE": ".cache/flashinfer",
+        "TORCH_EXTENSIONS_DIR": ".cache/torch-extensions",
     }.items():
         os.environ.setdefault(key, str(ROOT / directory))
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
