@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "driftbench-runner"
+version = "0.1.0"
+description = "Fresh inference and paired evaluation on the published DriftBench workloads"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+nvidia = ["vllm==0.17.1"]
+evaluation = ["sentence-transformers>=3.3,<6", "accelerate>=1,<2"]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+driftbench-run = "driftbench_runner.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["driftbench_runner*"]

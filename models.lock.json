@@ -1,0 +1,14 @@
+{
+  "inference": {
+    "model": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17"
+  },
+  "safety": {
+    "model": "Qwen/Qwen3Guard-Gen-0.6B",
+    "revision": "fada3b2f655b89601929198343c94cd2f64d93cc"
+  },
+  "chat_embedding": {
+    "model": "sentence-transformers/all-mpnet-base-v2",
+    "revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130"
+  }
+}

@@ -1,0 +1,11 @@
+.venv/
+.tools/
+.cache/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+vendor/
+models/
+results/*
+!results/.gitkeep
+docs/paper.pdf
