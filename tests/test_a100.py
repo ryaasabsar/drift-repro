@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 import os
 from pathlib import Path
 import stat
@@ -8,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from driftbench_runner import a100
+from driftbench_runner import a100, preset
 from driftbench_runner.common import ROOT, read_json
 from driftbench_runner.suite import load_plan
 
@@ -32,10 +33,10 @@ def test_credential_file_is_data_and_not_forwarded_in_arguments(tmp_path, monkey
     token = 'hf_fixture_$(touch should_not_exist)'
     path.write_text('HF_TOKEN=' + json.dumps(token) + '\n')
     monkeypatch.delenv('HF_TOKEN', raising=False)
-    a100.load_credentials(path)
+    preset.load_credentials(path)
     assert os.environ['HF_TOKEN'] == token
-    args = a100.parser().parse_args(['--limit', '2', '--device', '1', '--resume'])
-    assert token not in ' '.join(a100.suite_arguments(args))
+    args = preset.parser(a100.PRESET).parse_args(['--limit', '2', '--device', '1', '--resume'])
+    assert token not in ' '.join(preset.suite_arguments(a100.PRESET, args))
     assert not Path('should_not_exist').exists()
     captured = capsys.readouterr()
     assert token not in captured.out + captured.err
@@ -45,7 +46,7 @@ def test_empty_credentials_preserve_exported_token(tmp_path, monkeypatch):
     path = tmp_path / '.env'
     path.write_text('HF_TOKEN=\n')
     monkeypatch.setenv('HF_TOKEN', 'hf_exported_fixture')
-    a100.load_credentials(path)
+    preset.load_credentials(path)
     assert os.environ['HF_TOKEN'] == 'hf_exported_fixture'
 
 
@@ -53,17 +54,17 @@ def test_bad_credentials_do_not_disclose_contents(tmp_path):
     path = tmp_path / '.env'
     path.write_text('HF_TOKEN="private_fixture_token')
     with pytest.raises(ValueError) as error:
-        a100.load_credentials(path)
+        preset.load_credentials(path)
     assert 'private_fixture_token' not in str(error.value)
 
 
 def test_dry_run_needs_neither_credentials_nor_gpu(tmp_path, monkeypatch):
     def forbidden(*args):
         raise AssertionError('Dry run performed a real preflight')
-    monkeypatch.setattr(a100, 'load_credentials', forbidden)
-    monkeypatch.setattr(a100, 'check_requirements', forbidden)
+    monkeypatch.setattr(preset, 'load_credentials', forbidden)
+    monkeypatch.setattr(preset, 'check_requirements', forbidden)
     executed = []
-    monkeypatch.setattr(a100.os, 'execv', lambda binary, args: executed.append(args))
+    monkeypatch.setattr(preset.os, 'execv', lambda binary, args: executed.append(args))
     a100.main(['--dry-run', '--limit', '2', '--output', str(tmp_path / 'unused')])
     assert '--dry-run' in executed[0]
     assert not (tmp_path / 'unused').exists()
@@ -80,25 +81,25 @@ def test_hardware_guard_rejects_small_gpu_and_accepts_a100(monkeypatch):
 
 def test_gated_access_fails_before_qwen_preparation(tmp_path, monkeypatch):
     plan = load_plan(a100.SUITE, tmp_path)
-    monkeypatch.setattr(a100, 'check_hardware', lambda: {'gpu': 'A100'})
+    target = replace(a100.PRESET, check_hardware=lambda: {'gpu': 'A100'})
     models = []
     def denied(model, revision):
         models.append(model)
         raise RuntimeError('Access denied')
-    monkeypatch.setattr(a100, 'check_model_access', denied)
+    monkeypatch.setattr(preset, 'check_model_access', denied)
     with pytest.raises(RuntimeError, match='Access denied'):
-        a100.check_requirements(plan, False)
+        preset.check_requirements(target, plan, False)
     assert models == ['meta-llama/Llama-Guard-3-8B']
 
 
 def test_inference_only_skips_guard_and_code_worker(tmp_path, monkeypatch):
     plan = load_plan(a100.SUITE, tmp_path, limit=1)
     models = []
-    monkeypatch.setattr(a100, 'check_hardware', lambda: {'gpu': 'A100'})
-    monkeypatch.setattr(a100, 'check_model_access', lambda model, revision: models.append(model))
+    target = replace(a100.PRESET, check_hardware=lambda: {'gpu': 'A100'})
+    monkeypatch.setattr(preset, 'check_model_access', lambda model, revision: models.append(model))
     monkeypatch.setattr('driftbench_runner.inference.prepare', lambda *args: (None, None, [{'input_ids': [1, 2]}], None))
     monkeypatch.setattr('driftbench_runner.evaluation.execute_code', lambda *args: pytest.fail('Code evaluator should be deferred'))
-    report = a100.check_requirements(plan, True)
+    report = preset.check_requirements(target, plan, True)
     assert models == ['Qwen/Qwen2.5-7B-Instruct']
     assert report['evaluation'] is None
     assert report['required_context'] == 514
@@ -116,11 +117,11 @@ def test_shell_wrapper_produces_json_from_other_directory(tmp_path):
 def test_secret_location_ignored_and_private(tmp_path):
     patterns = (ROOT / '.gitignore').read_text().splitlines()
     assert '/.env' in patterns and '!/.env.example' in patterns
-    path = a100.ensure_credentials_file(tmp_path / 'private/.env')
+    path = preset.ensure_credentials_file(tmp_path / 'private/.env')
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
     path.write_text('HF_TOKEN=hf_fixture_existing\n')
-    a100.ensure_credentials_file(path)
+    preset.ensure_credentials_file(path)
     assert path.read_text() == 'HF_TOKEN=hf_fixture_existing\n'
 
 
@@ -128,5 +129,5 @@ def test_env_comments_quotes_and_export(tmp_path, monkeypatch):
     path = tmp_path / '.env'
     path.write_text('# Local credentials\n\nexport HF_TOKEN = "hf_fixture_${LITERAL}#suffix" # comment\n')
     monkeypatch.delenv('HF_TOKEN', raising=False)
-    a100.load_credentials(path)
+    preset.load_credentials(path)
     assert os.environ['HF_TOKEN'] == 'hf_fixture_${LITERAL}#suffix'

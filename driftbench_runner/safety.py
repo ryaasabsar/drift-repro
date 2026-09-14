@@ -33,6 +33,8 @@ def judge_environment(torch, device):
     if device != "cpu" and torch.cuda.is_available():
         result["cuda_runtime"] = torch.version.cuda
         result["cuda_devices"] = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
+        if getattr(torch.version, "hip", None):
+            result["rocm_runtime"] = torch.version.hip
     return result
 
 
