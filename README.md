@@ -10,6 +10,8 @@ The full RTX 3060 baseline is complete: **2,284 responses saved and all 1,284 ob
 
 **Run and compare settings:** [the comparison guide](docs/comparing-settings.md) explains the sequential GPU script, per-setting result rows, collected workload matrices, and searchable side-by-side reports. Start with `bash scripts/run_settings.sh --config suites/rtx3060.json --output results/my-settings`. Add `--limit 2` for a small validation run; omit it for all 2,284 prompts per setting.
 
+**Inference and evaluation on different machines:** use [the staged workflow](docs/staged-workflow.md). `scripts/results.sh` provides inference-only runs with unique IDs, separate safety/code/final stages, and checksummed `pack`/`unpack` transfers. Bundles carry the exact benchmark files, so an imported run can be evaluated without the original inference host or dataset checkout.
+
 The [settings validation report](docs/settings-validation.md) contains the completed four-setting sample run, 57 passing tests, TensorRT capacity checks and verified resume behavior. Open the [result matrix](results/current-settings/matrix.csv) or [Qwen3.5 comparison viewer](results/current-comparisons/qwen35-vllm-sglang/rows.html) to inspect individual answers. The current 6 GB TensorRT pair uses Qwen2.5-0.5B-Instruct to leave room for full long-context inputs.
 
 The [settings bundle](results/driftbench-settings-bundle.tar.gz) contains the runner, configurations, published prompt files and saved results, with an internal file-checksum manifest.

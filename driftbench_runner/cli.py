@@ -20,6 +20,28 @@ def main():
     status.add_argument("run_dir")
     status.add_argument("--json", action="store_true", help="Emit JSON; with --watch, emit one JSON object per update")
     status.add_argument("--watch", action="store_true", help="Keep watching and print changes")
+    infer = sub.add_parser("infer", help="Inference only, saved under a portable run ID")
+    infer.add_argument("--config", required=True, help="Suite JSON file")
+    infer.add_argument("--run-id", required=True, help="Unique experiment name, e.g. a100-qwen25-7b-r01")
+    infer.add_argument("--output-root", default="results/runs")
+    infer.add_argument("--limit", type=int)
+    infer.add_argument("--workloads", nargs="+", choices=list(WORKLOADS))
+    infer.add_argument("--device")
+    infer.add_argument("--resume", action="store_true")
+    infer.add_argument("--dry-run", action="store_true")
+    infer.add_argument("--allow-experimental", action="store_true")
+    stage = sub.add_parser("stage", help="Evaluate saved runs on separate hosts; accepts a suite or setting folder")
+    stage.add_argument("stage", choices=["status", "safety", "code", "final"])
+    stage.add_argument("run_dir")
+    stage.add_argument("--judge-model", help="Defaults to pinned Llama-Guard-3-8B")
+    stage.add_argument("--judge-revision")
+    stage.add_argument("--judge-device", choices=["cpu", "cuda"], default="cuda")
+    pack = sub.add_parser("pack", help="Pack complete inference and available evaluations with benchmark snapshots")
+    pack.add_argument("run_dir")
+    pack.add_argument("--output", required=True, help="New .tar.gz filename; also writes .sha256")
+    unpack = sub.add_parser("unpack", help="Verify and import a bundle into a new result folder")
+    unpack.add_argument("archive")
+    unpack.add_argument("--output", required=True, help="New destination directory, never an existing run")
     for name in ("run", "preflight"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--config", default=str(ROOT / "configs/rtx3060-qwen35-vllm.json"))
@@ -85,7 +107,7 @@ def main():
     if not getattr(args, "dry_run", False):
         if args.command in ("run", "suite", "compare", "collect"):
             directory = Path(args.output)
-        elif args.command in ("evaluate", "judge-safety", "score", "export"):
+        elif args.command in ("evaluate", "judge-safety", "score", "export") or (args.command == "stage" and args.stage != "status"):
             directory = Path(args.run_dir)
         elif args.command == "serve":
             from .common import read_json
@@ -116,7 +138,42 @@ def main():
 
 
 def dispatch(args):
-    if args.command == "status":
+    if args.command == 'infer':
+        import re
+        from .preset import load_credentials
+        from .suite import load_plan, run_suite
+        from .stages import refresh_status
+        if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]*', args.run_id):
+            raise ValueError('Use a run ID containing letters, digits, dots, underscores or hyphens')
+        output = Path(args.output_root) / args.run_id
+        if (output / 'transfer.json').exists():
+            raise ValueError('Imported runs are for evaluation; resume inference on the original host/folder')
+        plan = load_plan(args.config, output, args.limit, args.workloads, args.device)
+        experimental = any(s['config'].get('validation', {}).get('status') == 'experimental_unverified' for s in plan['settings'])
+        if experimental and not args.allow_experimental and not args.dry_run:
+            raise ValueError('This model/board preset is unverified; use --allow-experimental to attempt it')
+        if not args.dry_run:
+            load_credentials()
+        result = run_suite(args.config, output, limit=args.limit, workloads=args.workloads, device=args.device,
+                           resume=args.resume, dry_run=args.dry_run, inference_only=True)
+        if args.dry_run:
+            print(json.dumps(result, indent=2))
+        elif result['status'] == 'failed':
+            raise RuntimeError('Inference failed; inspect suite logs before resuming')
+        else:
+            refresh_status(output)
+            event('Inference saved; evaluation can run on another host', stage='infer', output=str(output),
+                  next=f'stage status {output}')
+    elif args.command == 'stage':
+        from .stages import run_stage
+        print(json.dumps(run_stage(args.run_dir, args.stage, args.judge_model, args.judge_revision, args.judge_device), indent=2))
+    elif args.command == 'pack':
+        from .transfer import pack
+        print(json.dumps(pack(args.run_dir, args.output), indent=2))
+    elif args.command == 'unpack':
+        from .transfer import unpack
+        print(json.dumps(unpack(args.archive, args.output), indent=2))
+    elif args.command == "status":
         from .status import show_status
         from .logging import progress_interval
         show_status(args.run_dir, args.json, args.watch, progress_interval())

@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from functools import lru_cache
 
-from .common import ROOT, WORKLOADS, digest, keyed, load_workloads, read_json, read_jsonl, write_json
+from .common import DATASET_DIR, ROOT, WORKLOADS, digest, keyed, load_workloads, read_json, read_jsonl, write_json
 from .logging import Progress, event
 
 EVALUATOR_VERSION = "driftbench-runner-eval-v3"
@@ -180,15 +180,43 @@ def load_run(run_dir):
     return manifest, outputs
 
 
-def evaluate_run(run_dir, execute=False, safety_labels=None):
+def run_workloads(run_dir, names):
+    """Imported runs carry their exact benchmark files; legacy runs use the checkout."""
+    bundled = Path(run_dir) / "datasets"
+    return load_workloads(names, dataset_dir=bundled if bundled.is_dir() else DATASET_DIR)
+
+
+def saved_code_results(path, manifest, outputs):
+    records = keyed(read_jsonl(path))
+    environment = None
+    for key, row in records.items():
+        source = outputs.get(key)
+        if (key[0] != 'code' or source is None or
+                row.get('run_fingerprint') != manifest['run_fingerprint'] or
+                row.get('source_sha256') != source['source_sha256'] or
+                row.get('output_sha256') != digest(source['output_text']) or
+                row.get('evaluator_version') != EVALUATOR_VERSION or
+                row.get('status') != 'scored' or type(row.get('correct')) is not bool or
+                row.get('score') != float(row['correct']) or
+                row.get('method') != 'humaneval_execution_pass_at_1' or
+                not row.get('execution_environment')):
+            raise ValueError(f'Invalid or stale saved code evaluation: {key}')
+        if environment is not None and row['execution_environment'] != environment:
+            raise ValueError('Saved code results mix evaluator environments')
+        environment = row['execution_environment']
+    return records
+
+
+def evaluate_run(run_dir, execute=False, safety_labels=None, code_results=None):
     run_dir = Path(run_dir)
     manifest, outputs = load_run(run_dir)
-    sources, source_info = load_workloads(list(manifest["sources"]))
+    sources, source_info = run_workloads(run_dir, list(manifest["sources"]))
     source_map = keyed(sources)
     for name, info in manifest["sources"].items():
         if source_info[name]["sha256"] != info["sha256"]:
             raise ValueError(f"Dataset content changed: {name}")
     labels = keyed(read_jsonl(safety_labels)) if safety_labels else {}
+    saved_code = saved_code_results(code_results, manifest, outputs) if code_results else {}
     scores = []
     with Progress("Evaluating saved responses", stage="evaluation", setting=manifest["config"].get("setup_id"),
                   total=len(outputs), code_execution=execute) as progress:
@@ -213,10 +241,13 @@ def evaluate_run(run_dir, execute=False, safety_labels=None):
                 result.update(status="scored", score=score, correct=score >= 0.5,
                               reference=row["answers"], method="longbench_token_f1", threshold=0.5)
             elif key[0] == "code":
-                result.update(execute_code(row, output["output_text"]) if execute else
-                              {"reason": "Use --code to run HumanEval in bubblewrap"})
-                result["method"] = "humaneval_execution_pass_at_1"
-                result["execution_environment"] = code_environment()
+                if key in saved_code:
+                    result.update(saved_code[key])
+                else:
+                    result.update(execute_code(row, output["output_text"]) if execute else
+                                  {"reason": "Use --code to run HumanEval in bubblewrap"})
+                    result["method"] = "humaneval_execution_pass_at_1"
+                    result["execution_environment"] = code_environment()
             elif key[0] == "safety":
                 label = labels.get(key)
                 if label:
