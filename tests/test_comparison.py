@@ -105,3 +105,31 @@ def test_missing_token_ids_are_not_zero_drift(tmp_path):
     assert report["records"][0]["token_sequence_changed"] is None
     assert report["workloads"]["math"]["token_comparable_pairs"] == 0
     assert report["workloads"]["math"]["token_change_rate"] is None
+
+
+def test_semantic_progress_finishes_both_sides_without_changing_scores(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    from driftbench_runner import comparison
+    a = make_run(tmp_path / 'a', ['hello', 'world'], [True, True], workload='chat')
+    b = make_run(tmp_path / 'b', ['hello', 'world'], [True, True], workload='chat')
+    notices = []
+    class Vector:
+        def __matmul__(self, other):
+            return 1.0
+    class Encoder:
+        max_seq_length = 384
+        tokenizer = SimpleNamespace(encode=lambda *args, **kwargs: [1])
+        def __init__(self, *args, **kwargs):
+            pass
+        def encode(self, texts, **kwargs):
+            assert kwargs['show_progress_bar'] is False
+            return [Vector() for _ in texts]
+    monkeypatch.setitem(sys.modules, 'sentence_transformers', SimpleNamespace(SentenceTransformer=Encoder))
+    monkeypatch.setattr(comparison, 'local_environment', lambda: None)
+    monkeypatch.setattr('driftbench_runner.logging.emit', notices.append)
+    result = compare_runs(a, b, tmp_path / 'out', semantic=True)
+    finished = [e for e in notices if e['message'].startswith('Embedding ') and e['message'].endswith('finished')]
+    assert len(finished) == 2
+    assert all(e['completed'] == e['total'] == 2 for e in finished)
+    assert result['workloads']['chat']['mean_semantic_shift'] == 0

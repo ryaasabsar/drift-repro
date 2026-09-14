@@ -3,6 +3,7 @@ from pathlib import Path
 
 from .common import ROOT, digest, keyed, local_environment, read_json, write_json
 from .evaluation import load_run, wilson
+from .logging import activity, event
 
 
 def verified_evaluations(directory, manifest, outputs):
@@ -16,10 +17,13 @@ def verified_evaluations(directory, manifest, outputs):
     for key, score in result.items():
         if key not in outputs or score["output_sha256"] != digest(outputs[key]["output_text"]):
             raise ValueError(f"Stale evaluation: {key}")
+        if score.get("source_sha256", outputs[key]["source_sha256"]) != outputs[key]["source_sha256"]:
+            raise ValueError(f"Stale evaluation source: {key}")
     return result
 
 
 def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_confounded=False):
+    event("Checking paired responses and evaluation compatibility", stage="comparison", baseline=str(baseline_dir), candidate=str(candidate_dir))
     baseline_meta, baseline = load_run(baseline_dir)
     candidate_meta, candidate = load_run(candidate_dir)
     if not baseline or set(baseline) != set(candidate):
@@ -30,7 +34,10 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
     confounds = []
     if baseline_meta.get("scheduling", "offline_batches") != candidate_meta.get("scheduling", "offline_batches"):
         confounds.append("request_scheduling")
-    if baseline_meta["config"].get("launch") != candidate_meta["config"].get("launch"):
+    def launch_controls(metadata):
+        return {k: v for k, v in metadata["config"].get("launch", {}).items()
+                if k not in ("log_path", "startup_timeout_seconds")}
+    if launch_controls(baseline_meta) != launch_controls(candidate_meta):
         confounds.append("launch_settings")
     for field in ("model", "revision", "generation", "prompt_format", "chat_template_kwargs", "seed", "batch_size", "batch_size_by_workload"):
         if baseline_meta["config"].get(field) != candidate_meta["config"].get(field):
@@ -96,17 +103,22 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
         pairs.append(row)
     semantic_meta = None
     if semantic:
-        local_environment()
-        from sentence_transformers import SentenceTransformer
-        pinned = read_json(ROOT / "models.lock.json")["chat_embedding"]
-        model_id, revision = pinned["model"], pinned["revision"]
-        model = SentenceTransformer(model_id, revision=revision, device="cpu")
+        with activity("Loading chat embedding evaluator", stage="model_load", device="cpu"):
+            local_environment()
+            from sentence_transformers import SentenceTransformer
+            pinned = read_json(ROOT / "models.lock.json")["chat_embedding"]
+            model_id, revision = pinned["model"], pinned["revision"]
+            model = SentenceTransformer(model_id, revision=revision, device="cpu")
         chat = [r for r in pairs if r["workload"] == "chat"]
         if chat:
             a_texts = [baseline[("chat", r["prompt_id"])]["output_text"] for r in chat]
             b_texts = [candidate[("chat", r["prompt_id"])]["output_text"] for r in chat]
-            emb_a = model.encode(a_texts, normalize_embeddings=True, show_progress_bar=True)
-            emb_b = model.encode(b_texts, normalize_embeddings=True, show_progress_bar=True)
+            with activity("Embedding baseline chat responses", stage="comparison", workload="chat", total=len(chat), device="cpu") as progress:
+                emb_a = model.encode(a_texts, normalize_embeddings=True, show_progress_bar=False)
+                progress.update(len(chat))
+            with activity("Embedding candidate chat responses", stage="comparison", workload="chat", total=len(chat), device="cpu") as progress:
+                emb_b = model.encode(b_texts, normalize_embeddings=True, show_progress_bar=False)
+                progress.update(len(chat))
             for row, va, vb, ta, tb in zip(chat, emb_a, emb_b, a_texts, b_texts):
                 similarity = min(1.0, max(-1.0, float(va @ vb)))
                 row.update(cosine_similarity=similarity, semantic_shift=1.0 - similarity,
@@ -151,5 +163,10 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
         writer = csv.DictWriter(handle, fieldnames=["workload", *next(iter(summary.values())).keys()])
         writer.writeheader()
         writer.writerows({"workload": name, **value} for name, value in summary.items())
-    print(f"Saved {output_dir / 'comparison.json'} and comparison.csv", flush=True)
+    from .tables import write_paired_tables
+    write_paired_tables(report, baseline_dir, candidate_dir, output_dir)
+    event("Comparison saved", stage="comparison", paired=len(pairs),
+          text_changes=sum(r["text_changed"] for r in pairs),
+          scored_pairs=sum(r["label_flip"] is not None for r in pairs),
+          label_flips=sum(r["label_flip"] is True for r in pairs), viewer=str(output_dir / "rows.html"))
     return report

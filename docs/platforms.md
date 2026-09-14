@@ -12,7 +12,7 @@ Use HTTP for both sides of a new framework comparison.
 
 | Target | vLLM | SGLang | TensorRT-LLM |
 |---|---|---|---|
-| NVIDIA RTX 3060 6 GB | Original full run; HTTP samples tested | Qwen3.5 sample and longest prompt tested | Qwen3 sample and longest prompt tested |
+| NVIDIA RTX 3060 6 GB | Original full run; Qwen3.5/Qwen2.5 HTTP samples tested | Qwen3.5 sample and longest prompt tested | Qwen2.5 samples, longest prompt and 16-request client batch tested |
 | AMD RX 7900 XT | ROCm profile, hardware pending | ROCm profile, hardware pending | Unsupported vendor |
 | AMD MI210 | ROCm profile, hardware pending | ROCm profile, hardware pending | Unsupported vendor |
 | Tenstorrent Wormhole | N150/Qwen3-8B vendor profile, hardware pending | N150/Llama3.1-8B plugin example, hardware pending | Unsupported vendor |
@@ -106,6 +106,14 @@ official CUDA 13 index when restoring the TensorRT lock.
 
 ### TensorRT-LLM
 
+For the current **full-workload 6 GB preset**, use
+`rtx3060-qwen25-05b-tensorrt-http.json` and its paired
+`rtx3060-qwen25-05b-vllm-http.json`. They use Qwen2.5-0.5B-Instruct at the same
+pinned revision. The TensorRT KV pool is bounded at 65,536 tokens (BF16), leaving
+working memory available while requesting a 32K context. The launcher records
+the observed limit and the client enforces it. The suite and current
+row-comparison workflow are described in [the comparison guide](comparing-settings.md).
+
 Here, “TensorRT serving” means NVIDIA **TensorRT-LLM**, using `trtllm-serve`.
 The adapter supports its completions API. This is not Torch-TensorRT or Triton
 Inference Server.
@@ -116,6 +124,11 @@ Qwen3.5. The explicit `rtx3060-qwen3-06b-tensorrt-http.json` profile uses
 model and must not be described as framework-only drift.
 The matching vLLM profile is `rtx3060-qwen3-06b-vllm-http.json`; it uses the same
 Qwen3 revision, prompt template, greedy settings and client batch plan.
+
+These Qwen3 profiles are retained as earlier experiments. A later launch on the
+same laptop exposed only 20,448 context tokens, below the longest request's
+22,416-token budget; increasing the cache then left insufficient working
+memory. Use the Qwen2.5 pair for the default full run on this laptop.
 
 ```bash
 source scripts/env.sh
@@ -128,7 +141,7 @@ uv pip install --python .venv-trt/bin/python \
 python scripts/install_cuda_compiler.py --version 13.0.2
 python scripts/install_workspace_gcc.py
 .venv-trt/bin/python -m driftbench_runner serve \
-  --config configs/rtx3060-qwen3-06b-tensorrt-http.json
+  --config configs/rtx3060-qwen25-05b-tensorrt-http.json
 ```
 
 The launcher supplies revision, context and batch settings explicitly. Additional

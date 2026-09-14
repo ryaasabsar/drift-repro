@@ -8,6 +8,14 @@ The full RTX 3060 baseline is complete: **2,284 responses saved and all 1,284 ob
 
 **Multiple serving frameworks:** NVIDIA vLLM, SGLang and TensorRT-LLM now have real workload validation, saved responses and two paired comparison reports. AMD and Tenstorrent profiles are prepared; physical validation awaits access. See the [platform guide](docs/platforms.md), [framework validation](docs/framework-validation.md), and [updated bundle](results/driftbench-multiplatform-bundle.tar.gz).
 
+**Run and compare settings:** [the comparison guide](docs/comparing-settings.md) explains the sequential GPU script, per-setting result rows, collected workload matrices, and searchable side-by-side reports. Start with `bash scripts/run_settings.sh --config suites/rtx3060.json --output results/my-settings`. Add `--limit 2` for a small validation run; omit it for all 2,284 prompts per setting.
+
+The [settings validation report](docs/settings-validation.md) contains the completed four-setting sample run, 57 passing tests, TensorRT capacity checks and verified resume behavior. Open the [result matrix](results/current-settings/matrix.csv) or [Qwen3.5 comparison viewer](results/current-comparisons/qwen35-vllm-sglang/rows.html) to inspect individual answers. The current 6 GB TensorRT pair uses Qwen2.5-0.5B-Instruct to leave room for full long-context inputs.
+
+The [settings bundle](results/driftbench-settings-bundle.tar.gz) contains the runner, configurations, published prompt files and saved results, with an internal file-checksum manifest.
+
+**Follow progress:** runs now show the active setting, workload, saved counts and periodic updates during long operations. Use `python -m driftbench_runner status results/my-settings --watch` from another terminal. See the [logging guide](docs/logging.md) for log files, verbosity and structured events. Existing bundles are snapshots from their original validation dates.
+
 | Workload | Published inputs used here | Evaluation |
 |---|---:|---|
 | HumanEval / code | 164 | Execute tests; one greedy completion, pass@1 |

@@ -1,0 +1,52 @@
+{
+  "suite_id": "rtx3060-model-framework-settings",
+  "workloads": [
+    "code",
+    "math",
+    "safety",
+    "chat",
+    "long_context"
+  ],
+  "limit": null,
+  "settings": [
+    {
+      "id": "rtx3060_qwen35_08b_vllm",
+      "config": "../results/settings-validation/settings/rtx3060_qwen35_08b_vllm/config.json",
+      "server_python": "../.venv/bin/python"
+    },
+    {
+      "id": "rtx3060_qwen35_08b_sglang",
+      "config": "../results/settings-validation/settings/rtx3060_qwen35_08b_sglang/config.json",
+      "server_python": "../.venv-sglang/bin/python"
+    },
+    {
+      "id": "rtx3060_qwen3_06b_vllm",
+      "config": "../results/settings-validation/settings/rtx3060_qwen3_06b_vllm/config.json",
+      "server_python": "../.venv/bin/python"
+    },
+    {
+      "id": "rtx3060_qwen3_06b_tensorrt",
+      "config": "../results/settings-validation/settings/rtx3060_qwen3_06b_tensorrt/config.json",
+      "server_python": "../.venv-trt/bin/python"
+    }
+  ],
+  "evaluation": {
+    "judge_model": "Qwen/Qwen3Guard-Gen-0.6B",
+    "judge_device": "cpu",
+    "code": true
+  },
+  "comparisons": [
+    {
+      "baseline": "rtx3060_qwen35_08b_vllm",
+      "candidate": "rtx3060_qwen35_08b_sglang",
+      "semantic": true,
+      "allow_confounded": true
+    },
+    {
+      "baseline": "rtx3060_qwen3_06b_vllm",
+      "candidate": "rtx3060_qwen3_06b_tensorrt",
+      "semantic": true,
+      "allow_confounded": true
+    }
+  ]
+}

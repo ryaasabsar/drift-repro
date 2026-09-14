@@ -1,31 +1,26 @@
-"""Read only: summarize the currently saved records of a run."""
+"""Compatibility wrapper; the runner's status command also supports suites."""
 import argparse
-import json
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from driftbench_runner.status import show_status
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("run_dir")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('run_dir')
+    parser.add_argument('--human', action='store_true', help='Show a readable summary instead of JSON')
+    parser.add_argument('--watch', action='store_true')
+    parser.add_argument('--progress-interval', type=float, default=15)
     args = parser.parse_args()
-    directory = Path(args.run_dir)
-    manifest = json.loads((directory / "manifest.json").read_text())
-    report = {"run": str(directory), "inference_status": manifest["status"], "workloads": {}}
-    for workload, source in manifest["sources"].items():
-        path = directory / f"{workload}.jsonl"
-        saved = sum(1 for line in path.open() if line.endswith("\n")) if path.exists() else 0
-        report["workloads"][workload] = {"saved": saved, "expected": source["selected"]}
-    labels = directory / "safety-labels.jsonl"
-    report["safety_judgments"] = sum(1 for line in labels.open() if line.endswith("\n")) if labels.exists() else 0
-    evaluation = directory / "evaluation.json"
-    if evaluation.exists():
-        report["evaluation"] = json.loads(evaluation.read_text())["summary"]["workloads"]
-        report["evaluation_matches_saved_counts"] = all(
-            report["evaluation"].get(workload, {}).get("generated") == counts["saved"]
-            for workload, counts in report["workloads"].items()
-        )
-    print(json.dumps(report, indent=2))
+    if not 0 < args.progress_interval < float('inf'):
+        parser.error('--progress-interval must be finite and positive')
+    try:
+        show_status(args.run_dir, not args.human, args.watch, args.progress_interval)
+    except KeyboardInterrupt:
+        raise SystemExit(130)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

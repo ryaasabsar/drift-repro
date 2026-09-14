@@ -1,0 +1,24 @@
+{
+  "suite_id": "wormhole-n150-model-framework-settings",
+  "workloads": [
+    "code",
+    "math",
+    "safety",
+    "chat",
+    "long_context"
+  ],
+  "limit": null,
+  "settings": [
+    {
+      "id": "wormhole_n150_qwen3_8b_vllm",
+      "config": "../configs/wormhole-n150-qwen3-8b-vllm-http.json",
+      "server_python": "../.venv-tt-vllm/bin/python"
+    }
+  ],
+  "evaluation": {
+    "judge_model": "Qwen/Qwen3Guard-Gen-0.6B",
+    "judge_device": "cpu",
+    "code": true
+  },
+  "comparisons": []
+}

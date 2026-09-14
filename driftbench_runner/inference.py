@@ -5,6 +5,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
+from .logging import InferenceProgress, activity, event
 
 from .common import (append_jsonl, digest, keyed, load_workloads, local_environment,
                      now, read_json, read_jsonl, write_json, UPSTREAM_COMMIT)
@@ -70,12 +71,14 @@ def prepare(config_path, workload_names, limit=None):
 
 
 def run(config_path, output_dir, workload_names, limit=None, resume=False, preflight=False):
-    config, tokenizer, rows, sources = prepare(config_path, workload_names, limit)
+    with activity("Loading tokenizer and preparing prompts", stage="preparation", config=str(config_path)):
+        config, tokenizer, rows, sources = prepare(config_path, workload_names, limit)
     from .hardware import validate_target
     validate_target(config)
     max_input = max(len(row["input_ids"]) for row in rows)
     max_total = max_input + config["generation"]["max_tokens"]
-    print(f"Prepared {len(rows)} prompts; longest input={max_input}; required context={max_total}", flush=True)
+    event("Prompts prepared", stage="preparation", setting=config.get("setup_id"), total=len(rows),
+          longest_input_tokens=max_input, required_context=max_total)
     if max_total > config["engine"]["max_model_len"]:
         raise ValueError(f"Need max_model_len >= {max_total}; no inputs will be silently truncated")
     if preflight:
@@ -126,7 +129,7 @@ def _run_locked(config, rows, sources, outdir, resume):
         manifest.update(status="complete", completed_records=len(rows), updated_at=now())
         manifest.pop("error", None)
         write_json(manifest_path, manifest)
-        print("All inference records already present", flush=True)
+        event("Reusing all saved responses", stage="resume", setting=config.get("setup_id"), completed=len(rows), total=len(rows))
         return manifest
     if config["backend"] != "vllm":
         raise ValueError("This runner currently implements the vLLM backend")
@@ -135,54 +138,57 @@ def _run_locked(config, rows, sources, outdir, resume):
     manifest.setdefault("attempts", []).append({"started_at": now(), "already_completed": len(existing), "remaining": len(pending)})
     write_json(manifest_path, manifest)
     try:
-        import torch
-        from vllm import LLM, SamplingParams
-        if config.get("hardware", {}).get("vendor") == "amd":
-            from .hardware import discover, require_hardware
-            hardware = discover()
-            require_hardware("amd", hardware)
-            if manifest["environment"].get("rocm") not in (None, hardware):
-                raise ValueError("Resume refused: ROCm serving environment changed")
-            manifest["environment"]["rocm"] = hardware
-            manifest["environment"]["rocm_runtime"] = torch.version.hip
-        manifest["environment"].update(cuda_runtime=torch.version.cuda,
-                                       gpu_name=torch.cuda.get_device_name(0),
-                                       gpu_capability=list(torch.cuda.get_device_capability(0)))
-        llm = LLM(model=config["model"], revision=config["revision"], tokenizer_revision=config["revision"],
-                  seed=config["seed"], generation_config="vllm", **config["engine"])
+        with activity("Loading inference model", stage="model_load", setting=config.get("setup_id"), model=config["model"]):
+            import torch
+            from vllm import LLM, SamplingParams
+            if config.get("hardware", {}).get("vendor") == "amd":
+                from .hardware import discover, require_hardware
+                hardware = discover()
+                require_hardware("amd", hardware)
+                if manifest["environment"].get("rocm") not in (None, hardware):
+                    raise ValueError("Resume refused: ROCm serving environment changed")
+                manifest["environment"]["rocm"] = hardware
+                manifest["environment"]["rocm_runtime"] = torch.version.hip
+            manifest["environment"].update(cuda_runtime=torch.version.cuda,
+                                           gpu_name=torch.cuda.get_device_name(0),
+                                           gpu_capability=list(torch.cuda.get_device_capability(0)))
+            llm = LLM(model=config["model"], revision=config["revision"], tokenizer_revision=config["revision"],
+                      seed=config["seed"], generation_config="vllm", **config["engine"])
         params = SamplingParams(seed=config["seed"], **config["generation"])
         # Warmup is outside all measured records.
-        llm.generate([{"prompt_token_ids": rows[0]["input_ids"][:128]}],
-                     SamplingParams(temperature=0, max_tokens=2, ignore_eos=True), use_tqdm=False)
+        with activity("Warming up model", stage="warmup", setting=config.get("setup_id")):
+            llm.generate([{"prompt_token_ids": rows[0]["input_ids"][:128]}],
+                         SamplingParams(temperature=0, max_tokens=2, ignore_eos=True), use_tqdm=False)
         manifest.update(status="running", updated_at=now())
         write_json(manifest_path, manifest)
         completed = len(existing)
-        for batch_index, batch in enumerate(planned_batches(rows, config)):
-            if all((r["workload"], r["prompt_id"]) in existing for r in batch):
-                continue
-            begin = time.perf_counter()
-            outputs = llm.generate([{"prompt_token_ids": r["input_ids"]} for r in batch], params, use_tqdm=False)
-            elapsed = time.perf_counter() - begin
-            if len(outputs) != len(batch):
-                raise RuntimeError("Output count does not match input count")
-            for row, output in zip(batch, outputs):
-                if (row["workload"], row["prompt_id"]) in existing:
+        with InferenceProgress(rows, existing, config) as progress:
+            for batch_index, batch in enumerate(planned_batches(rows, config)):
+                if all((r["workload"], r["prompt_id"]) in existing for r in batch):
                     continue
-                completion = output.outputs[0]
-                record = {"schema_version": 1, "setup_id": config["setup_id"], "workload": row["workload"],
-                          "prompt_id": row["prompt_id"], "source_sha256": row["source_sha256"],
-                          "request_sha256": row["request_sha256"], "prompt": row["prompt"],
-                          "rendered_prompt": row["rendered_prompt"], "input_token_ids": row["input_ids"],
-                          "output_text": completion.text, "output_token_ids": list(completion.token_ids),
-                          "finish_reason": completion.finish_reason, "stop_reason": completion.stop_reason,
-                          "input_tokens": len(row["input_ids"]), "output_tokens": len(completion.token_ids),
-                          "batch_wall_seconds": elapsed, "batch_size": len(batch), "batch_index": batch_index,
-                          "latency_seconds": elapsed if len(batch) == 1 else None,
-                          "status": "ok", "timestamp": now()}
-                append_jsonl(outdir / f"{row['workload']}.jsonl", record)
-                completed += 1
-            print(f"{completed}/{len(rows)} {batch[-1]['workload']} "
-                  f"{batch[-1]['prompt_id']} ({elapsed:.2f}s)", flush=True)
+                progress.batch(batch, batch_index)
+                begin = time.perf_counter()
+                outputs = llm.generate([{"prompt_token_ids": r["input_ids"]} for r in batch], params, use_tqdm=False)
+                elapsed = time.perf_counter() - begin
+                if len(outputs) != len(batch):
+                    raise RuntimeError("Output count does not match input count")
+                for row, output in zip(batch, outputs):
+                    if (row["workload"], row["prompt_id"]) in existing:
+                        continue
+                    completion = output.outputs[0]
+                    record = {"schema_version": 1, "setup_id": config["setup_id"], "workload": row["workload"],
+                              "prompt_id": row["prompt_id"], "source_sha256": row["source_sha256"],
+                              "request_sha256": row["request_sha256"], "prompt": row["prompt"],
+                              "rendered_prompt": row["rendered_prompt"], "input_token_ids": row["input_ids"],
+                              "output_text": completion.text, "output_token_ids": list(completion.token_ids),
+                              "finish_reason": completion.finish_reason, "stop_reason": completion.stop_reason,
+                              "input_tokens": len(row["input_ids"]), "output_tokens": len(completion.token_ids),
+                              "batch_wall_seconds": elapsed, "batch_size": len(batch), "batch_index": batch_index,
+                              "latency_seconds": elapsed if len(batch) == 1 else None,
+                              "status": "ok", "timestamp": now()}
+                    append_jsonl(outdir / f"{row['workload']}.jsonl", record)
+                    completed += 1
+                progress.saved(batch, elapsed)
         manifest.update(status="complete", completed_at=now(), completed_records=len(rows))
     except BaseException as exc:
         manifest.update(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",

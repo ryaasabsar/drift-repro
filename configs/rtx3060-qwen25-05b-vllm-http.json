@@ -1,0 +1,46 @@
+{
+  "setup_id": "rtx3060-qwen25-05b-vllm-http",
+  "backend": "vllm",
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "dtype": "bfloat16",
+    "max_model_len": 32768,
+    "max_num_seqs": 16,
+    "max_num_batched_tokens": 2048,
+    "gpu_memory_utilization": 0.6,
+    "tensor_parallel_size": 1,
+    "enforce_eager": true,
+    "enable_prefix_caching": false,
+    "language_model_only": true
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "nvidia",
+    "device": "RTX 3060 Laptop 6GB"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8001",
+    "metadata_path": "results/servers/rtx3060-qwen25-05b-vllm-http.json",
+    "timeout_seconds": 900
+  },
+  "launch": {
+    "startup_timeout_seconds": 900
+  }
+}

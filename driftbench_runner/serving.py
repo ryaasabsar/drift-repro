@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 from .common import ROOT, digest, local_environment, now, read_json, write_json
 from .hardware import discover, require_hardware, validate_target
 from .http_backend import HTTPBackend
+from .logging import activity, event
 
 
 def serving_identity(config):
@@ -155,15 +156,17 @@ def serve(config_path, dry_run=False):
     if dry_run:
         print(shlex.join(command))
         return command
-    configure_serving_environment(config)
-    environment = discover()
-    require_hardware(config["hardware"]["vendor"], environment)
-    if config["backend"] not in environment["packages"]:
-        raise RuntimeError(f"Install {config['backend']} in this Python environment before serving")
+    with activity("Checking serving hardware and environment", stage="startup", setting=config.get("setup_id")):
+        configure_serving_environment(config)
+        environment = discover()
+        require_hardware(config["hardware"]["vendor"], environment)
+        if config["backend"] not in environment["packages"]:
+            raise RuntimeError(f"Install {config['backend']} in this Python environment before serving")
     pinned_snapshot = None
     if config["hardware"]["vendor"] == "tenstorrent" or config["backend"] == "tensorrt-llm":
         from huggingface_hub import snapshot_download
-        pinned_snapshot = snapshot_download(config["model"], revision=config["revision"])
+        with activity("Resolving pinned model snapshot", stage="model_load", setting=config.get("setup_id"), model=config["model"]):
+            pinned_snapshot = snapshot_download(config["model"], revision=config["revision"])
         # Some loaders apply --revision to weights but reload tokenizer/config
         # from the floating Hub model name. A local snapshot pins all files.
         alias = ROOT / ".cache/serving-models" / config["revision"] / config["model"].split("/")[-1]
@@ -213,18 +216,21 @@ def serve(config_path, dry_run=False):
             write_json(metadata_path, metadata)
             deadline = time.monotonic() + launch.get("startup_timeout_seconds", 900)
             backend.timeout = 3
-            while True:
-                if process.poll() is not None:
-                    raise RuntimeError(f"Server exited with code {process.returncode}; see {log_path}")
-                try:
-                    probe = backend.probe()
-                    break
-                except (RuntimeError, ValueError, TimeoutError, OSError):
-                    if time.monotonic() > deadline:
-                        raise TimeoutError(f"Server did not become ready; see {log_path}")
-                    time.sleep(2)
+            with activity("Waiting for server health check", stage="startup", setting=config.get("setup_id"),
+                          framework=config["backend"], log=str(log_path), timeout_seconds=launch.get("startup_timeout_seconds", 900)):
+                while True:
+                    if process.poll() is not None:
+                        raise RuntimeError(f"Server exited with code {process.returncode}; see {log_path}")
+                    try:
+                        probe = backend.probe()
+                        break
+                    except (RuntimeError, ValueError, TimeoutError, OSError):
+                        if time.monotonic() > deadline:
+                            raise TimeoutError(f"Server did not become ready; see {log_path}")
+                        time.sleep(2)
             backend.timeout = config["server"].get("timeout_seconds", 900)
-            validation = backend.generate_one({"input_ids": [1]}, max_tokens=2)
+            with activity("Validating generation endpoint", stage="startup", setting=config.get("setup_id")):
+                validation = backend.generate_one({"input_ids": [1]}, max_tokens=2)
             if config["backend"] == "tensorrt-llm":
                 # TRT 1.2.1 may align/reduce its cache window even with fail-fast.
                 # Capture the worker's reported limit, not only the requested one.
@@ -240,7 +246,8 @@ def serve(config_path, dry_run=False):
                             api_validation={"input_tokens": 1, "output_tokens": validation["output_tokens"],
                                             "token_ids_source": validation["token_ids_source"]})
             write_json(metadata_path, metadata)
-            print(f"Server ready at {backend.base_url}; provenance: {metadata_path}; log: {log_path}", flush=True)
+            event("Server ready", stage="startup", setting=config.get("setup_id"), url=backend.base_url,
+                  context_tokens=metadata["effective_context_limit"], log=str(log_path), provenance=str(metadata_path))
             code = process.wait()
             if code:
                 raise RuntimeError(f"Server exited with code {code}; see {log_path}")
@@ -250,6 +257,7 @@ def serve(config_path, dry_run=False):
         metadata.update(status="failed", error=f"{type(exc).__name__}: {exc}")
         raise
     finally:
+        event("Stopping owned server process", stage="shutdown", setting=config.get("setup_id"))
         if process is not None:
             # Clean up only the process group created by this launcher.
             try:
@@ -265,3 +273,4 @@ def serve(config_path, dry_run=False):
         metadata["stopped_at"] = now()
         write_json(metadata_path, metadata)
         signal.signal(signal.SIGTERM, old_handler)
+        event("Server stopped", stage="shutdown", setting=config.get("setup_id"), status=metadata["status"])

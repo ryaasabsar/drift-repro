@@ -15,6 +15,7 @@ from pathlib import Path
 from functools import lru_cache
 
 from .common import ROOT, WORKLOADS, digest, keyed, load_workloads, read_json, read_jsonl, write_json
+from .logging import Progress, event
 
 EVALUATOR_VERSION = "driftbench-runner-eval-v3"
 
@@ -189,45 +190,49 @@ def evaluate_run(run_dir, execute=False, safety_labels=None):
             raise ValueError(f"Dataset content changed: {name}")
     labels = keyed(read_jsonl(safety_labels)) if safety_labels else {}
     scores = []
-    for key, output in outputs.items():
-        row = source_map[key]
-        if output["source_sha256"] != row["source_sha256"]:
-            raise ValueError(f"Source mismatch: {key}")
-        result = {"workload": key[0], "prompt_id": key[1], "status": "pending",
-                  "output_sha256": digest(output["output_text"]), "source_sha256": output["source_sha256"],
-                  "evaluator_version": EVALUATOR_VERSION}
-        text = final_text(output["output_text"])
-        if output["status"] != "ok":
-            result.update(status="error", reason="inference failed")
-        elif key[0] == "math":
-            answer = extract_number(text)
-            correct = answer is not None and answer == extract_number(row["answer"])
-            result.update(status="scored", extracted_answer=answer, reference=row["answer"],
-                          correct=correct, score=float(correct), method="numeric_exact_match")
-        elif key[0] == "long_context":
-            score = max(qa_f1(text, answer) for answer in row["answers"])
-            result.update(status="scored", score=score, correct=score >= 0.5,
-                          reference=row["answers"], method="longbench_token_f1", threshold=0.5)
-        elif key[0] == "code":
-            result.update(execute_code(row, output["output_text"]) if execute else
-                          {"reason": "Use --code to run HumanEval in bubblewrap"})
-            result["method"] = "humaneval_execution_pass_at_1"
-            result["execution_environment"] = code_environment()
-        elif key[0] == "safety":
-            label = labels.get(key)
-            if label:
-                if label.get("output_sha256") != result["output_sha256"] or label.get("source_sha256") != output["source_sha256"]:
-                    raise ValueError(f"Safety annotation belongs to different prompt/output: {key}")
-                if label.get("label") not in ("safe", "unsafe") or not label.get("judge"):
-                    raise ValueError(f"Invalid safety label or missing judge provenance: {key}")
-                result.update(status="scored", label=label["label"], correct=label["label"] == "safe",
-                              severity=label.get("severity", label["label"]),
-                              score=float(label["label"] == "safe"), method="safety_classification", judge=label["judge"])
+    with Progress("Evaluating saved responses", stage="evaluation", setting=manifest["config"].get("setup_id"),
+                  total=len(outputs), code_execution=execute) as progress:
+        for key, output in outputs.items():
+            progress.update(workload=key[0], prompt_id=key[1])
+            row = source_map[key]
+            if output["source_sha256"] != row["source_sha256"]:
+                raise ValueError(f"Source mismatch: {key}")
+            result = {"workload": key[0], "prompt_id": key[1], "status": "pending",
+                      "output_sha256": digest(output["output_text"]), "source_sha256": output["source_sha256"],
+                      "evaluator_version": EVALUATOR_VERSION}
+            text = final_text(output["output_text"])
+            if output["status"] != "ok":
+                result.update(status="error", reason="inference failed")
+            elif key[0] == "math":
+                answer = extract_number(text)
+                correct = answer is not None and answer == extract_number(row["answer"])
+                result.update(status="scored", extracted_answer=answer, reference=row["answer"],
+                              correct=correct, score=float(correct), method="numeric_exact_match")
+            elif key[0] == "long_context":
+                score = max(qa_f1(text, answer) for answer in row["answers"])
+                result.update(status="scored", score=score, correct=score >= 0.5,
+                              reference=row["answers"], method="longbench_token_f1", threshold=0.5)
+            elif key[0] == "code":
+                result.update(execute_code(row, output["output_text"]) if execute else
+                              {"reason": "Use --code to run HumanEval in bubblewrap"})
+                result["method"] = "humaneval_execution_pass_at_1"
+                result["execution_environment"] = code_environment()
+            elif key[0] == "safety":
+                label = labels.get(key)
+                if label:
+                    if label.get("output_sha256") != result["output_sha256"] or label.get("source_sha256") != output["source_sha256"]:
+                        raise ValueError(f"Safety annotation belongs to different prompt/output: {key}")
+                    if label.get("label") not in ("safe", "unsafe") or not label.get("judge"):
+                        raise ValueError(f"Invalid safety label or missing judge provenance: {key}")
+                    result.update(status="scored", label=label["label"], correct=label["label"] == "safe",
+                                  severity=label.get("severity", label["label"]),
+                                  score=float(label["label"] == "safe"), method="safety_classification", judge=label["judge"])
+                else:
+                    result["reason"] = "Requires labels from judge-safety; no heuristic substitute is used"
             else:
-                result["reason"] = "Requires labels from judge-safety; no heuristic substitute is used"
-        else:
-            result.update(status="pairwise_only", reason="Chat semantic drift requires a second run")
-        scores.append(result)
+                result.update(status="pairwise_only", reason="Chat semantic drift requires a second run")
+            scores.append(result)
+            progress.update(len(scores))
     summary = {"schema_version": 1, "run_fingerprint": manifest["run_fingerprint"],
                "evaluator_version": EVALUATOR_VERSION, "workloads": {}}
     for workload, source in manifest["sources"].items():
@@ -255,5 +260,7 @@ def evaluate_run(run_dir, execute=False, safety_labels=None):
         writer = csv.DictWriter(handle, fieldnames=["workload", *next(iter(summary["workloads"].values())).keys()])
         writer.writeheader()
         writer.writerows({"workload": name, **info} for name, info in summary["workloads"].items())
-    print(f"Saved {run_dir / 'evaluation.json'} and summary.csv", flush=True)
+    event("Evaluation saved", stage="evaluation", setting=manifest["config"].get("setup_id"),
+          scored=sum(r["status"] == "scored" for r in scores), pending=sum(r["status"] == "pending" for r in scores),
+          pairwise_only=sum(r["status"] == "pairwise_only" for r in scores), output=str(run_dir / "evaluation.json"))
     return summary

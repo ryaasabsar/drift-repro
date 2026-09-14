@@ -1,0 +1,56 @@
+{
+  "setup_id": "rtx3060-qwen25-05b-tensorrt-http",
+  "backend": "tensorrt-llm",
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "backend": "pytorch",
+    "dtype": "bfloat16",
+    "max_model_len": 32768,
+    "tensor_parallel_size": 1,
+    "max_batch_size": 16,
+    "max_num_tokens": 1024,
+    "kv_cache_free_gpu_memory_fraction": 0.7,
+    "llm_api_options": {
+      "cuda_graph_config": null,
+      "kv_cache_config": {
+        "max_tokens": 65536,
+        "enable_block_reuse": false
+      }
+    },
+    "enable_chunked_prefill": true,
+    "fail_fast_on_attention_window_too_large": true
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "nvidia",
+    "device": "RTX 3060 Laptop 6GB"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8003",
+    "metadata_path": "results/servers/rtx3060-qwen25-05b-tensorrt-http.json",
+    "timeout_seconds": 900,
+    "model_name": "Qwen2.5-0.5B-Instruct"
+  },
+  "launch": {
+    "startup_timeout_seconds": 900,
+    "cuda_version": "13.0.2",
+    "workspace_gcc": true
+  }
+}

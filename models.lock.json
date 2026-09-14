@@ -10,5 +10,9 @@
   "chat_embedding": {
     "model": "sentence-transformers/all-mpnet-base-v2",
     "revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130"
+  },
+  "inference_tensorrt_6gb": {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "revision": "7ae557604adf67be50417f59c2c2f167def9a775"
   }
 }
