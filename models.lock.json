@@ -14,5 +14,13 @@
   "inference_tensorrt_6gb": {
     "model": "Qwen/Qwen2.5-0.5B-Instruct",
     "revision": "7ae557604adf67be50417f59c2c2f167def9a775"
+  },
+  "inference_a100_qwen25_7b": {
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "revision": "a09a35458c702b33eeacc393d103063234e8bc28"
+  },
+  "safety_llamaguard3_8b": {
+    "model": "meta-llama/Llama-Guard-3-8B",
+    "revision": "7327bd9f6efbbe6101dc6cc4736302b3cbb6e425"
   }
 }

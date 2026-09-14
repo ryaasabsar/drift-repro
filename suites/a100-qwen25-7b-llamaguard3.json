@@ -1,0 +1,25 @@
+{
+  "suite_id": "a100-qwen25-7b-llamaguard3",
+  "workloads": [
+    "code",
+    "math",
+    "safety",
+    "chat",
+    "long_context"
+  ],
+  "limit": null,
+  "settings": [
+    {
+      "id": "a100_qwen25_7b_vllm",
+      "config": "../configs/a100-qwen25-7b-vllm-http.json",
+      "server_python": "../.venv/bin/python"
+    }
+  ],
+  "evaluation": {
+    "judge_model": "meta-llama/Llama-Guard-3-8B",
+    "judge_revision": "7327bd9f6efbbe6101dc6cc4736302b3cbb6e425",
+    "judge_device": "cuda",
+    "code": true
+  },
+  "comparisons": []
+}

@@ -9,3 +9,4 @@ models/
 results/*
 !results/.gitkeep
 docs/paper.pdf
+/.secrets/
