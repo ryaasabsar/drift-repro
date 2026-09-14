@@ -25,14 +25,16 @@
     "max_num_tokens": 1024,
     "kv_cache_free_gpu_memory_fraction": 0.7,
     "llm_api_options": {
-      "cuda_graph_config": null,
       "kv_cache_config": {
         "max_tokens": 65536,
         "enable_block_reuse": false
+      },
+      "pytorch_backend_config": {
+        "use_cuda_graph": false,
+        "disable_overlap_scheduler": true
       }
     },
-    "enable_chunked_prefill": true,
-    "fail_fast_on_attention_window_too_large": true
+    "enable_chunked_prefill": true
   },
   "batch_size_by_workload": {
     "long_context": 1
@@ -50,7 +52,15 @@
   },
   "launch": {
     "startup_timeout_seconds": 900,
-    "cuda_version": "13.0.2",
+    "cuda_version": "12.8.1",
     "workspace_gcc": true
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "reference_tensorrt_llm_version": "0.20.0",
+    "note": "CUDA 12.8.1 / TensorRT-LLM 0.20.0 PyTorch backend. Uses a pinned local model snapshot and the older API options schema. Exact model/hardware inference and full context require validation; earlier 1.2.1 results do not validate this stack.",
+    "references": [
+      "https://nvidia.github.io/TensorRT-LLM/0.20.0/reference/support-matrix.html"
+    ]
   }
 }

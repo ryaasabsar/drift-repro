@@ -94,7 +94,7 @@ is available when evaluating both runs on the same NVIDIA evaluation machine.
 
 The recorded environments are `requirements.sglang.lock.txt`,
 `requirements.tensorrt.lock.txt`, and `requirements.gcc13.explicit.txt`.
-Use these when reproducing this validation. The TensorRT lock selects its two CUDA 13 PyTorch wheels by official download URL.
+The current TensorRT lock replaces the historical CUDA 13 stack with TensorRT-LLM 0.20.0/CUDA 12.8. Earlier validation reports describe their recorded environments; they do not validate the replacement stack.
 
 ### TensorRT-LLM
 
@@ -110,14 +110,14 @@ Here, “TensorRT serving” means NVIDIA **TensorRT-LLM**, using `trtllm-serve`
 The adapter supports its completions API. This is not Torch-TensorRT or Triton
 Inference Server.
 
-Installed TensorRT-LLM 1.2.1 registers `Qwen3ForCausalLM` but does not register
+The previously validated TensorRT-LLM 1.2.1 registers `Qwen3ForCausalLM` but does not register
 Qwen3.5. The explicit `rtx3060-qwen3-06b-tensorrt-http.json` profile uses
 **Qwen3-0.6B** for compatibility testing. Comparing it to Qwen3.5 changes the
 model and must not be described as framework-only drift.
 The matching vLLM profile is `rtx3060-qwen3-06b-vllm-http.json`; it uses the same
 Qwen3 revision, prompt template, greedy settings and client batch plan.
 
-These Qwen3 profiles are retained as earlier experiments. A later launch on the
+These Qwen3 profiles are retained as earlier experiments and require 1.2.1; the current 0.20.0 installer is for the Qwen2.5 profiles. A later launch on the
 same laptop exposed only 20,448 context tokens, below the longest request's
 22,416-token budget; increasing the cache then left insufficient working
 memory. Use the Qwen2.5 pair for the default full run on this laptop.
@@ -139,9 +139,10 @@ tokenizer and configuration files as well as weights. TensorRT exposes the local
 directory basename as its model ID; `server.model_name` therefore explicitly
 sets `Qwen3-0.6B` while the benchmark's model identity remains `Qwen/Qwen3-0.6B`.
 
-TensorRT 1.2.1 may round or reduce its KV-cache attention window even when the
-CLI fail-fast flag is present. The launcher captures the worker's reported
-`max_seq_len` from the current startup log and stores `effective_context_limit`.
+TensorRT may round or reduce its KV-cache attention window. Release 0.20.0 has no
+CLI fail-fast flag. The runner captures the worker's explicit `max_seq_len` log line
+after KV-cache allocation and stores `effective_context_limit`, capped at the
+requested context length.
 The benchmark refuses prompts whose input plus generation budget exceeds that
 observed limit. The longest Qwen3-0.6B request needs 22,416 tokens.
 

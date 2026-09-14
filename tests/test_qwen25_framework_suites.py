@@ -4,7 +4,7 @@ import subprocess
 import pytest
 
 from driftbench_runner.common import ROOT, read_json
-from driftbench_runner.serving import launch_command
+from driftbench_runner.serving import launch_command, tensorrt_options
 from driftbench_runner.suite import load_plan
 
 
@@ -28,13 +28,19 @@ def test_framework_suites_preserve_pinned_experiment_controls(tmp_path, target, 
         assert config['engine']['tensor_parallel_size'] == 1
         assert config['hardware']['vendor'] == ('nvidia' if target == 'a100' else 'amd')
         command = launch_command(config)
-        assert command[command.index('--revision') + 1] == reference['revision']
+        if config['backend'] == 'tensorrt-llm':
+            assert '--revision' not in command
+            assert reference['revision'] in command[1]
+        else:
+            assert command[command.index('--revision') + 1] == reference['revision']
         assert config['server']['metadata_path'].startswith(str(tmp_path / 'settings' / item['id']))
         ports.add(config['server']['base_url'])
         environments.add(item['server_python'])
         if config['backend'] == 'sglang':
             assert 'max_mamba_cache_size' not in config['engine']
             assert '--disable-radix-cache' in command and '--disable-cuda-graph' in command
+            if target == 'a100':
+                assert '--disable-piecewise-cuda-graph' in command
             if target == 'mi210':
                 assert 'cuda_version' not in config['launch']
                 assert '.venv-rocm-sglang' in item['server_python']
@@ -44,11 +50,17 @@ def test_framework_suites_preserve_pinned_experiment_controls(tmp_path, target, 
 def test_tensorrt_profile_uses_correct_model_alias_and_preserves_context_budget():
     config = read_json(ROOT / 'configs/a100-qwen25-7b-tensorrt-http.json')
     assert config['server']['model_name'] == 'Qwen2.5-7B-Instruct'
-    assert config['engine']['fail_fast_on_attention_window_too_large'] is True
+    assert config['validation']['reference_tensorrt_llm_version'] == '0.20.0'
+    assert config['launch']['cuda_version'] == '12.8.1'
     assert config['engine']['llm_api_options']['kv_cache_config']['max_tokens'] >= config['engine']['max_model_len']
     command = launch_command(config)
     assert '--extra_llm_api_options' in command
-    assert '--enable_chunked_prefill' in command
+    assert '--enable_chunked_prefill' not in command
+    assert '--fail_fast_on_attention_window_too_large' not in command
+    options = tensorrt_options(config)
+    assert options['enable_chunked_prefill'] is True
+    assert options['pytorch_backend_config'] == {'use_cuda_graph': False, 'disable_overlap_scheduler': True}
+    assert options['kv_cache_config']['free_gpu_memory_fraction'] == 0.8
     assert command[command.index('--backend') + 1] == 'pytorch'
 
 

@@ -13,12 +13,12 @@ applies to these suites unchanged.
 |---|---|---|---|
 | A100 | vLLM | `.venv/bin/python` | 0.17.1 |
 | A100 | SGLang | `.venv-sglang/bin/python` | 0.5.10.post1 |
-| A100 | TensorRT-LLM | `.venv-trt/bin/python` | 1.2.1 |
+| A100 | TensorRT-LLM | `.venv-trt/bin/python` | 0.20.0 |
 | MI210 | vLLM | `.venv-rocm-vllm/bin/python` | ROCm-compatible build |
 | MI210 | SGLang | `.venv-rocm-sglang/bin/python` | ROCm-compatible build; 0.5.10.post1 CLI reference |
 
 TensorRT-LLM is NVIDIA-only. NVIDIA lists A100 in its
-[v1.2.1 hardware support](https://github.com/NVIDIA/TensorRT-LLM/blob/v1.2.1/docs/source/supported-hardware.md).
+[0.20.0 support matrix](https://nvidia.github.io/TensorRT-LLM/0.20.0/reference/support-matrix.html).
 The installed TensorRT-LLM PyTorch backend includes `Qwen2ForCausalLM`.
 SGLang has a [ROCm integration](https://docs.sglang.io/docs/hardware-platforms/amd_gpu),
 but MI210/gfx90a support must be verified for the actual build. These new profiles are
@@ -33,25 +33,41 @@ bash scripts/install_tensorrt.sh
 
 These scripts create the suite's `.venv-sglang` and `.venv-trt` environments with
 Python 3.12, restore the pinned dependencies, install the runner, and prepare workspace
-GCC 13 and CUDA compiler files (12.8.1 for SGLang, 13.0.2 for TensorRT-LLM). They need
-Linux x86_64, `python3`, `curl`, network access and writable workspace storage. They
+GCC 13 and CUDA 12.8.1 compiler files for both frameworks. They need
+Linux x86_64, `python3`, `curl`, `git`, network access and writable workspace storage. They
 require no `sudo`, system package installation or bubblewrap. The existing `.venv`
 client/vLLM environment is preserved. Rerunning an installer repairs its own environment
 from the snapshot, so keep custom package changes in a separate environment.
 
-Use `--dry-run` to inspect the commands without downloading or changing files, or
-`--check` to verify an existing installation. Checks cover dependency consistency,
-compiler execution, the PyTorch CUDA build and serving CLI imports. They do not load a
-model or establish inference support on A100. Installation output can be saved with
-`bash scripts/install_sglang.sh 2>&1 | tee sglang-install.log` (use `set -o pipefail`
-if scripting this command). Large framework wheels and their download cache require
-substantial free disk space; these local environments occupy about 11 GB and 15 GB,
-excluding models, toolchains and caches.
+Both installers force workspace-managed Python 3.12 with its own headers. If an existing
+framework environment uses system Python, the installer rebuilds that same environment
+path and restores its dependencies. This fixes the system `pyconfig.h` compilation error
+without requiring `python3-dev` or changing `.venv`.
 
-The CUDA 13 TensorRT environment needs a compatible host NVIDIA driver. The scripts
-do not install or upgrade the driver; a compiler download cannot supply driver support.
-If installation succeeds but the GPU smoke test fails, inspect that framework's server
-log before starting a full run.
+Use `--dry-run` to inspect commands, `--check` to check dependencies, Python-header
+compilation and serving imports, and `--check-gpu` on an allocated GPU to additionally
+run a CUDA calculation and initialize Triton's driver. Import diagnostics are saved in
+`.cache/sglang-install-check.log` or `.cache/tensorrt-llm-install-check.log`.
+An installation check does not load the benchmark model. The A100 SGLang profile
+explicitly disables both ordinary and piecewise CUDA graphs; disabling graphs alone
+would not fix missing headers needed by Triton attention kernels.
+
+TensorRT-LLM now uses 0.20.0, TensorRT 10.10 and PyTorch 2.7.0/CUDA 12.8 in the existing
+`.venv-trt`. This replaces the previous CUDA 13 stack. Its missing PyPI dependency
+`xgrammar==0.1.16` is built from the pinned upstream release commit using workspace GCC.
+Leave room for several GB of framework wheels, build files and model weights.
+The host still needs working CUDA device access. Neither this downgrade nor the Python
+header fix repairs a failing node driver.
+
+After this migration, use a **new run ID**: do not resume the old framework smoke run,
+since the Python environment and serving configuration have changed. For example:
+
+```bash
+bash scripts/install_sglang.sh --check-gpu
+bash scripts/install_tensorrt.sh --check-gpu
+bash scripts/results.sh infer --config suites/a100-qwen25-7b-frameworks.json \
+  --run-id a100-frameworks-cu128-smoke --limit 2
+```
 
 For MI210, prepare ROCm environments using the framework's installation instructions;
 do not apply the NVIDIA lockfiles there. The SGLang profile selects Triton attention and
@@ -60,6 +76,14 @@ Install the runner in each serving environment with `python -m pip install -e . 
 and ensure its client dependencies are available without replacing the framework's PyTorch.
 `DRIFTBENCH_PYTHON` selects the client/evaluation Python; it does **not** replace the
 per-framework `server_python` entries in the suite.
+
+Local migration checks passed on the RTX 3060: both frameworks passed Python-header,
+CUDA and Triton probes; TensorRT 0.20 accepted the A100 CLI/API settings and saved
+small-model workload responses. With overlap scheduling disabled, Qwen2.5-0.5B also
+passed the longest published prompt (21,921 input tokens, 22,433-token budget) and a
+32,768-token boundary probe without diagnostic CUDA overrides. Overlap-enabled
+execution hit a local kernel error, so the current TensorRT Qwen2.5 profiles disable it.
+These checks do not establish A100/Qwen2.5-7B inference results.
 
 ## Test each new framework first
 
@@ -91,7 +115,9 @@ bash scripts/results.sh infer --config suites/a100-qwen25-7b-tensorrt.json \
   --run-id a100-tensorrt-context-check --workloads long_context
 ```
 
-The client refuses silent truncation and checks the server's reported effective context.
+The client refuses silent truncation and checks the effective context reported by the
+worker after KV-cache allocation. This remains enforced for TensorRT 0.20.0, which
+does not provide the newer CLI fail-fast flag.
 TensorRT reserves at most 131,072 KV tokens in this profile; actual allocation depends on
 available memory. Its memory fraction applies to free GPU memory, while vLLM/SGLang use
 different memory-budget semantics. Equal numeric settings do not establish identical

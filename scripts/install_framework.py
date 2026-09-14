@@ -8,20 +8,32 @@ import platform
 import shlex
 import subprocess
 import sys
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class Framework(NamedTuple):
+    venv: str
+    cuda: str
+    package: str
+    version: str
+    runtime: str
+
+
 FRAMEWORKS = {
-    "sglang": (".venv-sglang", "12.8.1", "sglang", "0.5.10.post1", "12.8"),
-    "tensorrt": (".venv-trt", "13.0.2", "tensorrt-llm", "1.2.1", "13.0"),
+    "sglang": Framework(".venv-sglang", "12.8.1", "sglang", "0.5.10.post1", "12.8"),
+    "tensorrt": Framework(".venv-trt", "12.8.1", "tensorrt-llm", "0.20.0", "12.8"),
 }
 
 
 def target_path(framework, requested):
-    target = ROOT / (requested or FRAMEWORKS[framework][0])
+    default = FRAMEWORKS[framework].venv
+    target = ROOT / (requested or default)
     # Never let sync target the client/vLLM environment or a system interpreter.
     if (target.is_symlink() or target.resolve().parent != ROOT
-            or not target.name.startswith(FRAMEWORKS[framework][0])):
-        raise ValueError(f"Use a workspace directory named {FRAMEWORKS[framework][0]} or starting with it")
+            or not target.name.startswith(default)):
+        raise ValueError(f"Use a workspace directory named {default} or starting with it")
     if target.exists() and not (target / "pyvenv.cfg").is_file():
         raise ValueError(f"Existing target is not a virtual environment: {target}")
     return target.resolve()
@@ -37,32 +49,21 @@ def run(command, env, dry_run=False, timeout=None):
         subprocess.run(command, cwd=ROOT, env=env, check=True, timeout=timeout)
 
 
-def verify(framework, target, env, dry_run=False):
-    _, cuda, package, version, runtime = FRAMEWORKS[framework]
+def uses_managed_python(target):
+    config = dict(line.split(" = ", 1) for line in (target / "pyvenv.cfg").read_text().splitlines() if " = " in line)
+    home = Path(config.get("home", "/")).resolve()
+    return (ROOT / ".tools/python").resolve() in home.parents
+
+
+def verify(framework, target, env, dry_run=False, check_gpu=False):
+    spec = FRAMEWORKS[framework]
     python = target / "bin/python"
     run([ROOT / ".tools/uv", "pip", "check", "--python", python], env, dry_run)
-    # Use the exact same library/compiler environment as the benchmark launcher.
-    code = """
-import importlib.metadata as metadata
-import os
-import subprocess
-import sys
-from driftbench_runner.serving import configure_serving_environment
-package, expected, cuda, runtime = sys.argv[1:]
-assert sys.version_info[:2] == (3, 12), 'Expected Python 3.12'
-assert metadata.version(package) == expected, 'Framework version differs from snapshot'
-configure_serving_environment({'backend': package, 'hardware': {'vendor': 'nvidia'},
-    'launch': {'workspace_gcc': True, 'cuda_version': cuda}})
-subprocess.run([os.environ['CUDA_HOME'] + '/bin/nvcc', '--version'], check=True)
-subprocess.run([os.environ['CXX'], '--version'], check=True)
-subprocess.run([sys.executable, '-c',
-    'import torch; assert torch.version.cuda == ' + repr(runtime) +
-    '; print("PyTorch", torch.__version__, "CUDA", torch.version.cuda)'], check=True)
-module = 'sglang.launch_server' if package == 'sglang' else 'tensorrt_llm.commands.serve'
-subprocess.run([sys.executable, '-m', module, '--help'], check=True,
-    stdout=subprocess.DEVNULL, timeout=120)
-"""
-    run([python, "-c", code, package, version, cuda, runtime], env, dry_run, timeout=180)
+    command = [python, "-m", "driftbench_runner.framework_check",
+               spec.package, spec.version, spec.cuda, spec.runtime]
+    if check_gpu:
+        command.append("--check-gpu")
+    run(command, env, dry_run, timeout=450)
 
 
 def main():
@@ -71,19 +72,20 @@ def main():
     parser.add_argument("--venv", help="Workspace environment directory; defaults match the NVIDIA suites")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without creating files or downloading")
     parser.add_argument("--check", action="store_true", help="Check an existing installation without installing packages")
+    parser.add_argument("--check-gpu", action="store_true", help="Check an existing installation and run CUDA/Triton probes on an allocated GPU")
     args = parser.parse_args()
     try:
         if platform.system() != "Linux" or platform.machine() != "x86_64":
             raise ValueError("These pinned NVIDIA environments require Linux x86_64; they are not ROCm installers")
         target = target_path(args.framework, args.venv)
-        _, cuda, _, _, _ = FRAMEWORKS[args.framework]
+        cuda = FRAMEWORKS[args.framework].cuda
         env = dict(os.environ, UV_CACHE_DIR=str(ROOT / ".cache/uv"),
                    UV_PYTHON_INSTALL_DIR=str(ROOT / ".tools/python"),
                    XDG_CACHE_HOME=str(ROOT / ".cache"), PYTHONPATH=str(ROOT))
-        if args.check:
+        if args.check or args.check_gpu:
             if not args.dry_run and not (target / "bin/python").exists():
                 raise ValueError(f"Missing {target}/bin/python; run the installer without --check first")
-            verify(args.framework, target, env, args.dry_run)
+            verify(args.framework, target, env, args.dry_run, args.check_gpu)
         else:
             # Both installers share GCC/uv/CUDA caches. Serialize actual installs.
             lock = None
@@ -95,17 +97,25 @@ def main():
                 run(["bash", ROOT / "scripts/ensure_uv.sh"], env, args.dry_run)
                 uv = ROOT / ".tools/uv"
                 python = target / "bin/python"
-                if not target.exists():
-                    run([uv, "venv", "--python", "3.12", target], env, args.dry_run)
+                if not target.exists() or not uses_managed_python(target):
+                    if target.exists():
+                        print(f"Replacing system-Python environment at {target} with workspace-managed Python and complete headers.", flush=True)
+                    run([uv, "venv", "--managed-python", "--python", "3.12", "--clear", target], env, args.dry_run)
                 else:
                     run([python, "-c", "import sys; assert sys.version_info[:2] == (3, 12), 'Expected Python 3.12'"], env, args.dry_run)
+                # TensorRT 0.20 requires a source build of its removed xgrammar
+                # wheel. Prepare the workspace compiler before syncing packages.
+                run([python, ROOT / "scripts/install_workspace_gcc.py"], env, args.dry_run)
+                if args.framework == "tensorrt":
+                    env.update(CC=str(ROOT / ".tools/gcc13/bin/x86_64-conda-linux-gnu-gcc"),
+                               CXX=str(ROOT / ".tools/gcc13/bin/x86_64-conda-linux-gnu-g++"),
+                               CMAKE_BUILD_PARALLEL_LEVEL="2")
                 command = [uv, "pip", "sync", "--python", python,
                            ROOT / f"requirements.{args.framework}.lock.txt"]
                 if args.framework == "tensorrt":
-                    command += ["--index", "https://pypi.nvidia.com"]
+                    command += ["--index", "https://pypi.org/simple", "--default-index", "https://pypi.nvidia.com"]
                 run(command, env, args.dry_run)
                 run([uv, "pip", "install", "--python", python, "--no-deps", "-e", ROOT], env, args.dry_run)
-                run([python, ROOT / "scripts/install_workspace_gcc.py"], env, args.dry_run)
                 if not (ROOT / f".tools/cuda-{cuda}/bin/nvcc").is_file():
                     run([python, ROOT / "scripts/install_cuda_compiler.py", "--version", cuda], env, args.dry_run)
                 verify(args.framework, target, env, args.dry_run)
@@ -113,7 +123,9 @@ def main():
                 if lock:
                     lock.close()
         print("Plan complete." if args.dry_run else
-              f"Installation checks passed: {target}\nNext: run the standalone inference smoke suite on the target GPU.")
+              f"Package/compiler checks passed: {target}\n" +
+              ("CUDA/Triton probes passed; model inference still needs a smoke run." if args.check_gpu else
+               "GPU execution was not tested. Run this script with --check-gpu on your allocated GPU, then run the model smoke suite."))
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         if isinstance(exc, subprocess.CalledProcessError):
             detail = f"command exited with status {exc.returncode}; see the output above"

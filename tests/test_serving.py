@@ -1,6 +1,7 @@
 """Protocol fixtures test control preservation, not accelerator compatibility."""
 import copy
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -8,7 +9,8 @@ from driftbench_runner.common import digest, read_json, write_json
 from driftbench_runner.hardware import validate_target
 from driftbench_runner.http_backend import HTTPBackend
 from driftbench_runner.http_inference import run_http
-from driftbench_runner.serving import launch_command, serving_identity
+from driftbench_runner.serving import launch_command, serving_identity, tensorrt_context_limit, tensorrt_options
+from driftbench_runner import serving
 
 
 @pytest.fixture
@@ -113,6 +115,34 @@ def test_tensorrt_controls_include_pinned_revision_and_context_failure(config):
     config['launch'] = {'extra_args': ['--config', '/tmp/untracked.yaml']}
     with pytest.raises(ValueError, match='override'):
         launch_command(config)
+
+
+def test_legacy_context_capacity_honors_runtime_reductions(config):
+    config['validation'] = {'reference_tensorrt_llm_version': '0.20.0'}
+    assert tensorrt_context_limit(config, 'max_seq_len=1025, max_num_requests=16') == 1024
+    assert tensorrt_context_limit(config, 'max_seq_len=800, max_num_requests=16\nmax_seq_len=600, max_num_requests=16') == 600
+    with pytest.raises(RuntimeError, match='effective context'):
+        tensorrt_context_limit(config, '')
+
+
+@pytest.mark.parametrize('override', ['build_config', 'enable_chunked_prefill'])
+def test_extra_trt_options_cannot_bypass_controlled_budgets(config, override):
+    config['engine']['llm_api_options'] = {override: {}}
+    with pytest.raises(ValueError, match='cannot override'):
+        tensorrt_options(config)
+
+
+def test_tensorrt_can_find_managed_python_shared_library(config, tmp_path, monkeypatch):
+    config['backend'] = 'tensorrt-llm'
+    monkeypatch.setattr(serving, 'sys', SimpleNamespace(executable=str(tmp_path / 'venv/bin/python'),
+        prefix=str(tmp_path / 'venv'), base_prefix=str(tmp_path / 'managed-python')))
+    monkeypatch.setenv('LD_LIBRARY_PATH', '')
+    monkeypatch.setenv('PATH', '/usr/bin')
+    serving.configure_serving_environment(config)
+    import os
+    paths = os.environ['LD_LIBRARY_PATH'].split(os.pathsep)
+    assert str(tmp_path / 'managed-python/lib') in paths
+    assert str(tmp_path / 'venv/lib') in paths
 
 
 def test_http_manifest_resume_and_server_binding(config, tmp_path, monkeypatch):

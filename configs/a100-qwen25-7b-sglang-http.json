@@ -24,7 +24,8 @@
     "disable_radix_cache": true,
     "disable_cuda_graph": true,
     "attention_backend": "triton",
-    "disable_overlap_schedule": true
+    "disable_overlap_schedule": true,
+    "disable_piecewise_cuda_graph": true
   },
   "batch_size_by_workload": {
     "long_context": 1
