@@ -1,0 +1,49 @@
+{
+  "setup_id": "a100_qwen35_9b_base_vllm",
+  "backend": "vllm",
+  "model": "Qwen/Qwen3.5-9B-Base",
+  "revision": "68c46c4b3498877f3ef123c856ecfde50c39f404",
+  "prompt_format": "raw",
+  "chat_template_kwargs": {},
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "dtype": "bfloat16",
+    "max_model_len": 32768,
+    "max_num_seqs": 16,
+    "max_num_batched_tokens": 2048,
+    "gpu_memory_utilization": 0.8,
+    "tensor_parallel_size": 1,
+    "enforce_eager": true,
+    "enable_prefix_caching": false,
+    "language_model_only": true
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "nvidia",
+    "device": "NVIDIA A100 40GB or 80GB"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8001",
+    "metadata_path": "results/servers/a100-qwen35-9b-base-vllm-http.json",
+    "timeout_seconds": 900
+  },
+  "launch": {
+    "startup_timeout_seconds": 900
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "reference_vllm_version": "0.17.1",
+    "note": "Configuration prepared; full-model inference and longest-prompt validation on this hardware are pending. Uses text-only Qwen3.5 hybrid attention; architecture is present in the reference CUDA runtimes, but this 9B Base checkpoint has not been executed here. Base checkpoint: raw published prompts, without a chat template or thinking prefix."
+  }
+}

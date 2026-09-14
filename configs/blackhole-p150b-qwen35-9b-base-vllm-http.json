@@ -1,0 +1,60 @@
+{
+  "setup_id": "blackhole_p150b_qwen35_9b_base_vllm",
+  "backend": "vllm",
+  "model": "Qwen/Qwen3.5-9B-Base",
+  "revision": "68c46c4b3498877f3ef123c856ecfde50c39f404",
+  "prompt_format": "raw",
+  "chat_template_kwargs": {},
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "max_model_len": 32768,
+    "max_num_seqs": 32,
+    "max_num_batched_tokens": 32768,
+    "block_size": 64,
+    "additional_config": {
+      "tt": {}
+    }
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "tenstorrent",
+    "device": "Tenstorrent Blackhole P150b"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8001",
+    "metadata_path": "results/servers/blackhole-p150b-qwen35-9b-base-vllm-http.json",
+    "timeout_seconds": 1800,
+    "return_token_ids": false
+  },
+  "launch": {
+    "startup_timeout_seconds": 3600,
+    "env": {
+      "VLLM_CONFIGURE_LOGGING": "1",
+      "VLLM_RPC_TIMEOUT": "900000",
+      "VLLM_TARGET_DEVICE": "tt",
+      "TORCHDYNAMO_DISABLE": "1",
+      "MESH_DEVICE": "P150",
+      "ARCH_NAME": "blackhole"
+    }
+  },
+  "validation": {
+    "status": "experimental_unverified",
+    "references": [
+      "https://github.com/tenstorrent/tt-inference-server/blob/main/docs/model_support/models_by_hardware.md",
+      "https://github.com/tenstorrent/tt-inference-server/blob/main/tt-sglang-plugin/README.md"
+    ],
+    "upstream_model_status": "NOT_VERIFIED_ON_P150",
+    "note": "Experimental TT vLLM template. The upstream P150 support table does not list this checkpoint; its Qwen3.5 hybrid attention requires dedicated TT kernels. A configuration alone does not implement model support. Internal precision and context must be validated on P150b. Base checkpoint: raw published prompts, without a chat template or thinking prefix."
+  }
+}

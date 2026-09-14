@@ -1,0 +1,58 @@
+{
+  "setup_id": "blackhole_p150b_qwen25_7b_sglang",
+  "backend": "sglang",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {},
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "max_model_len": 32768,
+    "max_running_requests": 16,
+    "page_size": 128,
+    "tt_visible_devices": "(0)",
+    "mesh_shape": "1,1",
+    "disable_overlap_schedule": true,
+    "disable_radix_cache": true
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "tenstorrent",
+    "device": "Tenstorrent Blackhole P150b"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8002",
+    "metadata_path": "results/servers/blackhole-p150b-qwen25-7b-sglang-http.json",
+    "timeout_seconds": 1800
+  },
+  "launch": {
+    "command_prefix": [
+      "sglang-tt-server"
+    ],
+    "startup_timeout_seconds": 3600,
+    "env": {
+      "ARCH_NAME": "blackhole",
+      "MESH_DEVICE": "P150"
+    }
+  },
+  "validation": {
+    "status": "experimental_unverified",
+    "references": [
+      "https://github.com/tenstorrent/tt-inference-server/blob/main/docs/model_support/models_by_hardware.md",
+      "https://github.com/tenstorrent/tt-inference-server/blob/main/tt-sglang-plugin/README.md"
+    ],
+    "upstream_model_status": "NOT_VERIFIED_ON_P150",
+    "note": "Experimental single-chip TT SGLang template. Upstream plugin documents Wormhole testing only; Blackhole P150b and this exact model require backend implementation/validation. Installing standard SGLang does not provide TT support."
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "setup_id": "blackhole_p150b_llama31_8b_instruct_vllm",
+  "backend": "vllm",
+  "model": "meta-llama/Llama-3.1-8B-Instruct",
+  "revision": "0e9e39f249a16976918f6564b8830bc894c89659",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {},
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "max_model_len": 32768,
+    "max_num_seqs": 32,
+    "max_num_batched_tokens": 32768,
+    "block_size": 64,
+    "additional_config": {
+      "tt": {}
+    }
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "tenstorrent",
+    "device": "Tenstorrent Blackhole P150b"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8001",
+    "metadata_path": "results/servers/blackhole-p150b-llama31-8b-instruct-vllm-http.json",
+    "timeout_seconds": 1800,
+    "return_token_ids": false
+  },
+  "launch": {
+    "startup_timeout_seconds": 3600,
+    "env": {
+      "VLLM_CONFIGURE_LOGGING": "1",
+      "VLLM_RPC_TIMEOUT": "900000",
+      "VLLM_TARGET_DEVICE": "tt",
+      "TORCHDYNAMO_DISABLE": "1",
+      "MESH_DEVICE": "P150",
+      "ARCH_NAME": "blackhole"
+    }
+  },
+  "validation": {
+    "status": "experimental_unverified",
+    "references": [
+      "https://github.com/tenstorrent/tt-inference-server/blob/main/docs/model_support/models_by_hardware.md",
+      "https://github.com/tenstorrent/tt-inference-server/blob/main/docs/model_support/llm/Llama-3.1-8B_p150.md"
+    ],
+    "upstream_model_status": "EXPERIMENTAL_ON_P150",
+    "note": "Upstream documents Llama-3.1-8B-Instruct on P150 through its experimental TT-Metal vLLM integration. Requires a matching TT build; exact P150b board, internal precision, kernels and requested context remain unvalidated here. Requires approved Hugging Face access to meta-llama/Llama-3.1-8B-Instruct."
+  }
+}

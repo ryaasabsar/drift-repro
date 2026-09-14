@@ -14,6 +14,8 @@ The full RTX 3060 baseline is complete: **2,284 responses saved and all 1,284 ob
 
 **Qwen2.5-7B framework suites:** [setup and run instructions](docs/qwen25-frameworks.md) cover A100 vLLM/SGLang/TensorRT-LLM and MI210 vLLM/SGLang. Standalone suites support testing each new framework before a combined run; these new model/hardware profiles await physical validation.
 
+**Three-model matrix:** [configs and run commands](docs/model-matrix.md) cover Qwen3.5-9B-Base, Qwen2.5-7B-Instruct and Llama-3.1-8B-Instruct with vLLM/SGLang on A100, MI210 and Blackhole P150b. Each host suite has six settings; P150b combinations are explicitly experimental.
+
 The current TensorRT installer replaces `.venv-trt` with TensorRT-LLM 0.20.0/CUDA 12.8. Both NVIDIA framework installers use workspace-managed Python headers; use `--check-gpu` on the allocated GPU before inference. After migrating, start a new run ID. Earlier result bundles retain their original framework versions.
 
 The [settings validation report](docs/settings-validation.md) contains the completed four-setting sample run, 57 passing tests, TensorRT capacity checks and verified resume behavior. Open the [result matrix](results/current-settings/matrix.csv) or [Qwen3.5 comparison viewer](results/current-comparisons/qwen35-vllm-sglang/rows.html) to inspect individual answers. The current 6 GB TensorRT pair uses Qwen2.5-0.5B-Instruct to leave room for full long-context inputs.

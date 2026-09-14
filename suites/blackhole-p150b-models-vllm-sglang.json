@@ -1,0 +1,69 @@
+{
+  "suite_id": "blackhole-p150b-models-vllm-sglang",
+  "workloads": [
+    "code",
+    "math",
+    "safety",
+    "chat",
+    "long_context"
+  ],
+  "limit": null,
+  "settings": [
+    {
+      "id": "blackhole_p150b_qwen35_9b_base_vllm",
+      "config": "../configs/blackhole-p150b-qwen35-9b-base-vllm-http.json",
+      "server_python": "../.venv-tt-vllm/bin/python"
+    },
+    {
+      "id": "blackhole_p150b_qwen35_9b_base_sglang",
+      "config": "../configs/blackhole-p150b-qwen35-9b-base-sglang-http.json",
+      "server_python": "../.venv-tt-sglang/bin/python"
+    },
+    {
+      "id": "blackhole_p150b_qwen25_7b_vllm",
+      "config": "../configs/blackhole-p150b-qwen25-7b-vllm-http.json",
+      "server_python": "../.venv-tt-vllm/bin/python"
+    },
+    {
+      "id": "blackhole_p150b_qwen25_7b_sglang",
+      "config": "../configs/blackhole-p150b-qwen25-7b-sglang-http.json",
+      "server_python": "../.venv-tt-sglang/bin/python"
+    },
+    {
+      "id": "blackhole_p150b_llama31_8b_instruct_vllm",
+      "config": "../configs/blackhole-p150b-llama31-8b-instruct-vllm-http.json",
+      "server_python": "../.venv-tt-vllm/bin/python"
+    },
+    {
+      "id": "blackhole_p150b_llama31_8b_instruct_sglang",
+      "config": "../configs/blackhole-p150b-llama31-8b-instruct-sglang-http.json",
+      "server_python": "../.venv-tt-sglang/bin/python"
+    }
+  ],
+  "evaluation": {
+    "judge_model": "meta-llama/Llama-Guard-3-8B",
+    "judge_revision": "7327bd9f6efbbe6101dc6cc4736302b3cbb6e425",
+    "judge_device": "cuda",
+    "code": true
+  },
+  "comparisons": [
+    {
+      "baseline": "blackhole_p150b_qwen35_9b_base_vllm",
+      "candidate": "blackhole_p150b_qwen35_9b_base_sglang",
+      "semantic": true,
+      "allow_confounded": true
+    },
+    {
+      "baseline": "blackhole_p150b_qwen25_7b_vllm",
+      "candidate": "blackhole_p150b_qwen25_7b_sglang",
+      "semantic": true,
+      "allow_confounded": true
+    },
+    {
+      "baseline": "blackhole_p150b_llama31_8b_instruct_vllm",
+      "candidate": "blackhole_p150b_llama31_8b_instruct_sglang",
+      "semantic": true,
+      "allow_confounded": true
+    }
+  ]
+}

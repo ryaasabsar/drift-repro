@@ -1,0 +1,54 @@
+{
+  "setup_id": "mi210_llama31_8b_instruct_sglang",
+  "backend": "sglang",
+  "model": "meta-llama/Llama-3.1-8B-Instruct",
+  "revision": "0e9e39f249a16976918f6564b8830bc894c89659",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {},
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "dtype": "bfloat16",
+    "max_model_len": 32768,
+    "tensor_parallel_size": 1,
+    "mem_fraction_static": 0.8,
+    "max_running_requests": 16,
+    "chunked_prefill_size": 2048,
+    "disable_radix_cache": true,
+    "disable_cuda_graph": true,
+    "attention_backend": "triton",
+    "disable_overlap_schedule": true,
+    "disable_piecewise_cuda_graph": true
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "amd",
+    "device": "AMD Instinct MI210 64GB"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8002",
+    "metadata_path": "results/servers/mi210-llama31-8b-instruct-sglang-http.json",
+    "timeout_seconds": 900
+  },
+  "launch": {
+    "startup_timeout_seconds": 900,
+    "env": {
+      "SGLANG_USE_AITER": "0"
+    }
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "reference_sglang_version": "0.5.10.post1",
+    "note": "Configuration prepared; full-model inference and longest-prompt validation on this hardware are pending. Requires a ROCm build for MI210/gfx90a; the reference version describes CLI compatibility only. Do not use the NVIDIA lockfiles. Requires approved Hugging Face access to meta-llama/Llama-3.1-8B-Instruct."
+  }
+}
