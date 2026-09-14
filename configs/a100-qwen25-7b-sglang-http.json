@@ -1,0 +1,52 @@
+{
+  "setup_id": "a100_qwen25_7b_sglang",
+  "backend": "sglang",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {},
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "dtype": "bfloat16",
+    "max_model_len": 32768,
+    "tensor_parallel_size": 1,
+    "mem_fraction_static": 0.8,
+    "max_running_requests": 16,
+    "chunked_prefill_size": 2048,
+    "disable_radix_cache": true,
+    "disable_cuda_graph": true,
+    "attention_backend": "triton",
+    "disable_overlap_schedule": true
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "nvidia",
+    "device": "NVIDIA A100 40GB or 80GB"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8002",
+    "metadata_path": "results/servers/a100-qwen25-7b-sglang-http.json",
+    "timeout_seconds": 900
+  },
+  "launch": {
+    "startup_timeout_seconds": 900,
+    "cuda_version": "12.8.1",
+    "workspace_gcc": true
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "reference_sglang_version": "0.5.10.post1",
+    "note": "Prepared for SGLang 0.5.10.post1 with workspace CUDA 12.8.1 and GCC 13. Qwen2 implementation is present; A100 7B inference remains unvalidated."
+  }
+}

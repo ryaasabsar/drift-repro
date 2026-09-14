@@ -12,6 +12,8 @@ The full RTX 3060 baseline is complete: **2,284 responses saved and all 1,284 ob
 
 **Inference and evaluation on different machines:** use [the staged workflow](docs/staged-workflow.md). `scripts/results.sh` provides inference-only runs with unique IDs, separate safety/code/final stages, and checksummed `pack`/`unpack` transfers. Bundles carry the exact benchmark files, so an imported run can be evaluated without the original inference host or dataset checkout.
 
+**Qwen2.5-7B framework suites:** [setup and run instructions](docs/qwen25-frameworks.md) cover A100 vLLM/SGLang/TensorRT-LLM and MI210 vLLM/SGLang. Standalone suites support testing each new framework before a combined run; these new model/hardware profiles await physical validation.
+
 The [settings validation report](docs/settings-validation.md) contains the completed four-setting sample run, 57 passing tests, TensorRT capacity checks and verified resume behavior. Open the [result matrix](results/current-settings/matrix.csv) or [Qwen3.5 comparison viewer](results/current-comparisons/qwen35-vllm-sglang/rows.html) to inspect individual answers. The current 6 GB TensorRT pair uses Qwen2.5-0.5B-Instruct to leave room for full long-context inputs.
 
 The [settings bundle](results/driftbench-settings-bundle.tar.gz) contains the runner, configurations, published prompt files and saved results, with an internal file-checksum manifest.

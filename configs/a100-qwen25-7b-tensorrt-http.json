@@ -1,0 +1,63 @@
+{
+  "setup_id": "a100_qwen25_7b_tensorrt",
+  "backend": "tensorrt-llm",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {},
+  "seed": 42,
+  "batch_size": 16,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0
+  },
+  "engine": {
+    "backend": "pytorch",
+    "dtype": "bfloat16",
+    "max_model_len": 32768,
+    "tensor_parallel_size": 1,
+    "max_batch_size": 16,
+    "max_num_tokens": 2048,
+    "kv_cache_free_gpu_memory_fraction": 0.8,
+    "llm_api_options": {
+      "cuda_graph_config": null,
+      "disable_overlap_scheduler": true,
+      "kv_cache_config": {
+        "max_tokens": 131072,
+        "enable_block_reuse": false
+      }
+    },
+    "enable_chunked_prefill": true,
+    "fail_fast_on_attention_window_too_large": true
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "nvidia",
+    "device": "NVIDIA A100 40GB or 80GB"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8003",
+    "metadata_path": "results/servers/a100-qwen25-7b-tensorrt-http.json",
+    "timeout_seconds": 900,
+    "model_name": "Qwen2.5-7B-Instruct"
+  },
+  "launch": {
+    "startup_timeout_seconds": 900,
+    "cuda_version": "13.0.2",
+    "workspace_gcc": true
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "reference_tensorrt_llm_version": "1.2.1",
+    "note": "TensorRT-LLM PyTorch backend, native BF16 Qwen2 weights. Requires a CUDA-13-compatible host driver and workspace CUDA 13.0.2/GCC 13. A100 and Qwen2 are supported upstream; this exact 7B profile needs physical validation. KV allocation may be reduced by available memory; the runner checks the effective context limit.",
+    "references": [
+      "https://github.com/NVIDIA/TensorRT-LLM/blob/v1.2.1/docs/source/supported-hardware.md"
+    ]
+  }
+}
