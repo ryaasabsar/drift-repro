@@ -1,6 +1,7 @@
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -84,3 +85,84 @@ def test_check_cannot_recreate_an_environment(workspace):
     result = invoke(workspace, "--check", "--recreate")
     assert result.returncode == 2
     assert not (workspace / ".tools").exists()
+
+
+def fake_toolchain(workspace, compiler_exit=0):
+    """Exercise repair orchestration without loading TTNN or requiring hardware."""
+    target = workspace / ".venv-tt-vllm"
+    (target / "bin").mkdir(parents=True)
+    (target / "pyvenv.cfg").write_text("version = 3.12\n")
+    # Use a wrapper: pyvenv.cfg must not change the test interpreter's stdlib.
+    (target / "bin/python").write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    (target / "bin/python").chmod(0o755)
+    wheel = workspace / "ttnn"
+    wheel.mkdir()
+    (wheel / "__init__.py").write_text("raise AssertionError('Must not import TTNN')\n")
+    dist = workspace / "ttnn-0.77.0.dist-info"
+    dist.mkdir()
+    (dist / "METADATA").write_text("Name: ttnn\nVersion: 0.77.0\n")
+    metal = workspace / ".tools/tt-metal-9f9cd4fd590f4b606bd0981a4fe0b6403eb38ec9"
+    metal.mkdir(parents=True)
+    sfpi = workspace / ".tools/sfpi-7.69.0"
+    (sfpi / "compiler/bin").mkdir(parents=True)
+    compiler = sfpi / "compiler/bin/riscv-tt-elf-g++"
+    compiler.write_text(f'#!/bin/sh\n[ "$1" = --version ] && exit 0\ncat >/dev/null\nexit {compiler_exit}\n')
+    compiler.chmod(0o755)
+    (sfpi / ".driftbench-archive-sha256").write_text(
+        "b0c93362de2f69b0e4c335abd126ff59748f5dae316980d17aa1525ed523eb14\n"
+    )
+    return wheel, metal, sfpi
+
+
+def test_toolchain_repair_registers_both_roots_without_installing_python(workspace):
+    wheel, metal, sfpi = fake_toolchain(workspace)
+    result = invoke(workspace, "--toolchain-only")
+    assert result.returncode == 0, result.stderr
+    assert "pip install" not in result.stdout
+    for root in (wheel, metal):
+        assert (root / "runtime/sfpi").resolve() == sfpi
+    before = sorted(workspace.rglob("*"))
+    check = invoke(workspace, "--check", "--toolchain-only")
+    assert check.returncode == 0, check.stderr
+    assert sorted(workspace.rglob("*")) == before
+
+
+def test_failed_compiler_probe_does_not_register_runtime_links(workspace):
+    wheel, metal, _ = fake_toolchain(workspace, compiler_exit=42)
+    result = invoke(workspace, "--toolchain-only")
+    assert result.returncode == 42, result.stderr
+    assert not (wheel / "runtime").exists()
+    assert not (metal / "runtime").exists()
+
+
+def test_toolchain_check_does_not_repair_missing_links(workspace):
+    wheel, metal, _ = fake_toolchain(workspace)
+    result = invoke(workspace, "--check", "--toolchain-only")
+    assert result.returncode != 0
+    assert "run installer --toolchain-only" in result.stderr
+    assert not (wheel / "runtime").exists()
+    assert not (metal / "runtime").exists()
+
+
+def test_toolchain_repair_preserves_existing_runtime_compiler(workspace):
+    wheel, _, _ = fake_toolchain(workspace)
+    existing = wheel / "runtime/sfpi"
+    existing.mkdir(parents=True)
+    (existing / "keep").write_text("custom compiler")
+    result = invoke(workspace, "--toolchain-only")
+    assert result.returncode != 0
+    assert "refusing to replace" in result.stderr
+    assert (existing / "keep").read_text() == "custom compiler"
+
+
+def test_toolchain_download_rejects_bad_checksum_and_cleans_staging(workspace):
+    wheel, _, sfpi = fake_toolchain(workspace)
+    shutil.rmtree(sfpi)
+    curl = workspace / ".tools/curl"
+    curl.write_text('#!/bin/sh\nfor arg; do output="$arg"; done\nprintf invalid > "$output"\n')
+    curl.chmod(0o755)
+    result = invoke(workspace, "--toolchain-only")
+    assert result.returncode != 0
+    assert not sfpi.exists()
+    assert not (wheel / "runtime").exists()
+    assert not list((workspace / ".tools").glob(".sfpi-install.*"))

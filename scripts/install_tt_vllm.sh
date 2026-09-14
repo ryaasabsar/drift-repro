@@ -8,14 +8,19 @@ plugin_commit=6d3bb2854f5f8885acc1b12111d929bffdebc36e
 metal_commit=9f9cd4fd590f4b606bd0981a4fe0b6403eb38ec9
 plugin="$root/.tools/vllm-tt-plugin-$plugin_commit"
 metal="$root/.tools/tt-metal-$metal_commit"
+# From this TT-Metal commit's tt_metal/sfpi-version (Debian x86_64 archive).
+sfpi_version=7.69.0
+sfpi_hash=b0c93362de2f69b0e4c335abd126ff59748f5dae316980d17aa1525ed523eb14
+sfpi="$root/.tools/sfpi-$sfpi_version"
 uv="$root/.tools/uv"
 dry_run=false
 check_only=false
+toolchain_only=false
 recreate=false
 
 usage() {
     cat <<'EOF'
-Usage: bash scripts/install_tt_vllm.sh [--dry-run | --check] [--recreate]
+Usage: bash scripts/install_tt_vllm.sh [--dry-run | --check] [--recreate | --toolchain-only]
 
 Install into .venv-tt-vllm with workspace-managed Python 3.12:
   vLLM 0.25.1 (empty/source build), vllm-tt-plugin compat/vllm-0.25.1,
@@ -24,6 +29,8 @@ Install into .venv-tt-vllm with workspace-managed Python 3.12:
 --dry-run   Print the installation plan; create/download nothing.
 --check     Check the existing installation without installing or opening devices.
 --recreate  Replace ONLY .venv-tt-vllm (e.g. an earlier Python 3.10 installation).
+--toolchain-only  Install/check SFPI 7.69.0 for an existing TTNN 0.77.0 environment.
+                  Leaves Python packages intact; no sudo or device access.
 
 This is a pinned package baseline, not a validated P150b model deployment.
 TT-Metal 0.77.0 documents Blackhole KMD >=2.8.0 and firmware 19.8.1.
@@ -35,13 +42,14 @@ for arg in "$@"; do
     case "$arg" in
         --dry-run) dry_run=true ;;
         --check) check_only=true ;;
+        --toolchain-only) toolchain_only=true ;;
         --recreate) recreate=true ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $arg" >&2; usage >&2; exit 2 ;;
     esac
 done
-if $check_only && $recreate; then
-    echo '--check and --recreate cannot be combined.' >&2
+if $recreate && { $check_only || $toolchain_only; }; then
+    echo '--recreate cannot be combined with --check or --toolchain-only.' >&2
     exit 2
 fi
 if [[ "$(uname -s)" != Linux || "$(uname -m)" != x86_64 ]]; then
@@ -76,6 +84,73 @@ checkout() {
     fi
 }
 
+setup_sfpi() (
+    # TT-Metal selects <runtime root>/runtime/sfpi before /opt/tenstorrent/sfpi.
+    # Register both the installed wheel and the matching source runtime roots.
+    if $dry_run; then
+        echo "+ Install/check SFPI $sfpi_version (SHA256 $sfpi_hash) in $sfpi"
+        echo '+ Register SFPI under the TTNN wheel and TT-Metal runtime directories; compile a Blackhole probe.'
+        return
+    fi
+    local wheel compiler temporary
+    wheel=$("$target/bin/python" - <<'PY'
+from importlib.metadata import distribution
+from pathlib import Path
+d = distribution("ttnn")
+assert d.version == "0.77.0", "SFPI pin requires TTNN 0.77.0"
+p = Path(d.locate_file("ttnn")).resolve()
+assert (p / "__init__.py").is_file(), f"Missing TTNN wheel: {p}"
+print(p)
+PY
+    )
+    if [[ -L "$sfpi" ]]; then
+        echo "Refusing SFPI installation symlink: $sfpi" >&2; exit 1
+    fi
+    if [[ ! -e "$sfpi" ]] && ! $check_only; then
+        temporary=$(mktemp -d "$root/.tools/.sfpi-install.XXXXXX")
+        trap 'rm -rf -- "$temporary"' EXIT
+        curl --fail --location --retry 3 \
+            "https://github.com/tenstorrent/sfpi/releases/download/$sfpi_version/sfpi_${sfpi_version}_x86_64_debian.txz" \
+            --output "$temporary/sfpi.txz"
+        if ! printf '%s  %s\n' "$sfpi_hash" "$temporary/sfpi.txz" | sha256sum --check --status; then
+            echo 'SFPI archive checksum mismatch; refusing to extract it.' >&2
+            exit 1
+        fi
+        tar -xJf "$temporary/sfpi.txz" -C "$temporary" --no-same-owner
+        printf '%s\n' "$sfpi_hash" > "$temporary/sfpi/.driftbench-archive-sha256"
+        mv "$temporary/sfpi" "$sfpi"
+    fi
+    if [[ ! -f "$sfpi/.driftbench-archive-sha256" ]] || \
+        [[ "$(cat "$sfpi/.driftbench-archive-sha256")" != "$sfpi_hash" ]]; then
+        echo "Missing or unrecognized SFPI installation: $sfpi; use --toolchain-only to install it." >&2
+        exit 1
+    fi
+    compiler="$sfpi/compiler/bin/riscv-tt-elf-g++"
+    "$compiler" --version
+    printf 'int sfpi_probe() { return 0; }\n' | "$compiler" \
+        -std=c++17 -ftt-nttp -ftt-constinit -ftt-consteval -ftt-no-dyninit \
+        -mcpu=tt-bh -x c++ -c -o /dev/null -
+    "$target/bin/python" - "$sfpi" "$wheel" "$metal" "$check_only" <<'PY'
+from pathlib import Path
+import sys
+sfpi = Path(sys.argv[1]).resolve()
+for root in map(Path, sys.argv[2:4]):
+    if not root.is_dir():
+        raise RuntimeError(f"Missing runtime root: {root}; run the full installer first")
+    link = root / "runtime" / "sfpi"
+    if link.is_symlink() and link.resolve() == sfpi:
+        continue
+    if link.exists() or link.is_symlink():
+        raise RuntimeError(f"Existing SFPI at {link}; refusing to replace it")
+    if sys.argv[4] == "true":
+        raise RuntimeError(f"Missing {link}; run installer --toolchain-only")
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(sfpi, target_is_directory=True)
+    print(f"Registered {link} -> {sfpi}")
+print("SFPI Blackhole compilation probe passed (no device opened).")
+PY
+)
+
 # Override an activated CUDA/ROCm environment when invoking uv and subprocesses.
 export UV_CACHE_DIR="$root/.cache/uv"
 export UV_PYTHON_INSTALL_DIR="$root/.tools/python"
@@ -92,6 +167,10 @@ export PYTHONPATH="$root"
 echo 'TT environment: Python 3.12, vLLM 0.25.1, TTNN 0.77.0, CPU PyTorch 2.11.0.'
 echo 'Package setup only: TT-Metal 0.77.0 documents Blackhole KMD >=2.8.0 / firmware 19.8.1.'
 
+if $toolchain_only && ! $dry_run && [[ ! -x "$target/bin/python" ]]; then
+    echo 'Missing TT environment; run the full installer first.' >&2
+    exit 1
+fi
 if ! $check_only; then
     if ! $dry_run; then
         mkdir -p "$root/.tools"
@@ -99,6 +178,17 @@ if ! $check_only; then
         exec 9>"$root/.tools/framework-install.lock"
         flock 9
     fi
+fi
+if $toolchain_only; then
+    setup_sfpi
+    if $dry_run; then
+        echo 'Compiler repair plan complete; nothing changed.'
+    else
+        echo 'Compiler check passed. Python packages and host drivers were not changed.'
+    fi
+    exit 0
+fi
+if ! $check_only; then
     run bash "$root/scripts/ensure_uv.sh"
     if [[ ! -e "$target" ]] || $recreate; then
         creation=("$uv" venv --managed-python --python 3.12)
@@ -130,6 +220,7 @@ EOF
     run "$uv" pip uninstall --python "$target/bin/python" vllm
     run bash -euo pipefail -c 'cd "$1"; source docs/install-vllm-tt.sh' _ "$plugin"
     run "$uv" pip install --python "$target/bin/python" --no-deps -e "$root"
+    setup_sfpi
 
     if ! $dry_run; then
         # The wheel supplies TTNN; the matching checkout supplies models.*.
@@ -151,15 +242,16 @@ PY
 fi
 
 if $dry_run; then
-    echo 'Plan complete. Final checks: package dependencies, CPU torch, TTNN import, TT plugin discovery.'
+    echo 'Plan complete. Final checks: SFPI compilation, package dependencies, CPU torch, TTNN import, TT plugin discovery.'
     exit 0
 fi
 if [[ ! -x "$target/bin/python" ]]; then
     echo 'Missing .venv-tt-vllm/bin/python; run without --check first.' >&2
     exit 1
 fi
+if $check_only; then setup_sfpi; fi
 unset VLLM_TARGET_DEVICE
-"$target/bin/python" - "$target" "$plugin_commit" "$metal_commit" <<'PY'
+"$target/bin/python" - "$target" "$plugin_commit" "$metal_commit" "$sfpi_version" "$sfpi_hash" <<'PY'
 import importlib.metadata as metadata
 import json
 from pathlib import Path
@@ -221,7 +313,9 @@ if not Path(vllm_tt_plugin.__file__).resolve().is_relative_to(plugin_source):
     raise RuntimeError("Imported TT plugin is outside the pinned source checkout")
 print("CPU torch, TTNN, vLLM and TT plugin imports passed.", flush=True)
 report = {"python": sys.version, "packages": packages, "plugin_commit": sys.argv[2],
-          "tt_metal_commit": sys.argv[3], "checks": "package/import checks only",
+          "tt_metal_commit": sys.argv[3], "sfpi_version": sys.argv[4],
+          "sfpi_archive_sha256": sys.argv[5],
+          "checks": "package/import checks and SFPI Blackhole compilation probe",
           "hardware_validated": False}
 (target / "tt-install-report.json").write_text(json.dumps(report, indent=2) + "\n")
 PY
