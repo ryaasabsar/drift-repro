@@ -8,7 +8,7 @@ The full RTX 3060 baseline is complete: **2,284 responses saved and all 1,284 ob
 
 **Multiple serving frameworks:** NVIDIA vLLM, SGLang and TensorRT-LLM now have real workload validation, saved responses and two paired comparison reports. AMD and Tenstorrent profiles are prepared; physical validation awaits access. See the [platform guide](docs/platforms.md), [framework validation](docs/framework-validation.md), and [updated bundle](results/driftbench-multiplatform-bundle.tar.gz).
 
-**Run and compare settings:** [the comparison guide](docs/comparing-settings.md) explains the sequential GPU script, per-setting result rows, collected workload matrices, and searchable side-by-side reports. Start with `bash scripts/run_settings.sh --config suites/rtx3060.json --output results/my-settings`. Add `--limit 2` for a small validation run; omit it for all 2,284 prompts per setting.
+**Run and compare settings:** [the comparison guide](docs/comparing-settings.md) explains the sequential GPU script, per-setting result rows, collected workload matrices, and searchable side-by-side reports. Start with `bash scripts/results.sh suite --config suites/rtx3060.json --output results/my-settings`. Add `--limit 2` for a small validation run; omit it for all 2,284 prompts per setting.
 
 **Inference and evaluation on different machines:** use [the staged workflow](docs/staged-workflow.md). `scripts/results.sh` provides inference-only runs with unique IDs, separate safety/code/final stages, and checksummed `pack`/`unpack` transfers. Bundles carry the exact benchmark files, so an imported run can be evaluated without the original inference host or dataset checkout.
 
@@ -50,7 +50,7 @@ For the complete sequence (inference, small safety judge, then evaluation), run:
 ```bash
 bash scripts/run_full.sh > results/full-run.log 2>&1
 # In another terminal:
-python scripts/progress.py results/rtx3060-qwen35-vllm
+bash scripts/results.sh status results/rtx3060-qwen35-vllm --json
 ```
 
 The script resumes an existing compatible run and does not overwrite completed inference records. Individual stages are also available:

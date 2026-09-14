@@ -44,10 +44,10 @@ The real validation first selected the two Qwen2.5 settings, then resumed to
 finish the remaining settings, then resumed the completed suite:
 
 ```bash
-bash scripts/run_settings.sh --config suites/rtx3060.json \
+bash scripts/results.sh suite --config suites/rtx3060.json \
   --output results/settings-qwen25-validation --limit 2 \
   --settings rtx3060_qwen25_05b_vllm rtx3060_qwen25_05b_tensorrt
-bash scripts/run_settings.sh --config suites/rtx3060.json \
+bash scripts/results.sh suite --config suites/rtx3060.json \
   --output results/settings-qwen25-validation --limit 2 --resume
 ```
 

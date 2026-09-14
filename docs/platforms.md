@@ -45,21 +45,14 @@ python -m driftbench_runner doctor --output results/hardware.json
 The original vLLM environment is created by `scripts/bootstrap.sh`. The new
 vLLM server profile is `configs/rtx3060-qwen35-vllm-http.json`.
 
-SGLang has an isolated environment:
+Install SGLang and its workspace CUDA/GCC toolchains without `sudo`:
 
 ```bash
-source scripts/env.sh
-uv venv --python 3.12 .venv-sglang
-uv pip install --python .venv-sglang/bin/python 'sglang==0.5.10.post1'
-python scripts/install_cuda_compiler.py --version 12.8.1
+bash scripts/install_sglang.sh
 ```
 
-On this Ubuntu 20.04 host, GCC 9 cannot compile SGLang's C++20 JIT kernels. A
-workspace GCC 13 environment is used by the local profile (`workspace_gcc: true`):
-
-```bash
-python scripts/install_workspace_gcc.py
-```
+The installer restores `requirements.sglang.lock.txt` into `.venv-sglang` and installs
+the runner. See [installer requirements and checks](qwen25-frameworks.md#environments-and-support).
 
 On a host with a suitable C++20 compiler and CUDA toolkit, remove the local
 `workspace_gcc` and `cuda_version` launch settings and use that host's toolchain.
@@ -101,8 +94,7 @@ is available when evaluating both runs on the same NVIDIA evaluation machine.
 
 The recorded environments are `requirements.sglang.lock.txt`,
 `requirements.tensorrt.lock.txt`, and `requirements.gcc13.explicit.txt`.
-Use these when reproducing this validation. Keep CUDA 13 PyTorch wheels on the
-official CUDA 13 index when restoring the TensorRT lock.
+Use these when reproducing this validation. The TensorRT lock selects its two CUDA 13 PyTorch wheels by official download URL.
 
 ### TensorRT-LLM
 
@@ -131,15 +123,7 @@ same laptop exposed only 20,448 context tokens, below the longest request's
 memory. Use the Qwen2.5 pair for the default full run on this laptop.
 
 ```bash
-source scripts/env.sh
-uv venv --python 3.12 .venv-trt
-uv pip install --python .venv-trt/bin/python \
-  --extra-index-url https://pypi.nvidia.com 'tensorrt-llm==1.2.1' 'openmpi==5.0.10'
-uv pip install --python .venv-trt/bin/python \
-  'torch==2.9.1+cu130' 'torchvision==0.24.1+cu130' \
-  --index-url https://download.pytorch.org/whl/cu130
-python scripts/install_cuda_compiler.py --version 13.0.2
-python scripts/install_workspace_gcc.py
+bash scripts/install_tensorrt.sh
 .venv-trt/bin/python -m driftbench_runner serve \
   --config configs/rtx3060-qwen25-05b-tensorrt-http.json
 ```

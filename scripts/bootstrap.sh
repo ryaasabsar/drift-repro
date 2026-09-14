@@ -2,10 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .tools vendor
-if [[ ! -x .tools/uv ]]; then
-  curl -fsSL https://astral.sh/uv/install.sh -o .tools/install-uv.sh
-  UV_UNMANAGED_INSTALL="$PWD/.tools" sh .tools/install-uv.sh
-fi
+source scripts/ensure_uv.sh
 source scripts/env.sh
 uv venv --python 3.12 .venv
 uv pip sync --python .venv/bin/python requirements.lock.txt

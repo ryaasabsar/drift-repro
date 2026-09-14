@@ -15,15 +15,15 @@ Python with `-m driftbench_runner suite` and the same arguments.
 
 ```bash
 # First inspect settings and input counts; this does not load a model.
-bash scripts/run_settings.sh --config suites/rtx3060.json \
+bash scripts/results.sh suite --config suites/rtx3060.json \
   --output results/my-3060-settings --dry-run
 
 # Full experiment: 2,284 prompts per setting, all five workloads.
-bash scripts/run_settings.sh --config suites/rtx3060.json \
+bash scripts/results.sh suite --config suites/rtx3060.json \
   --output results/my-3060-settings
 
 # After interruption, use the same selection and output directory.
-bash scripts/run_settings.sh --config suites/rtx3060.json \
+bash scripts/results.sh suite --config suites/rtx3060.json \
   --output results/my-3060-settings --resume
 ```
 
@@ -73,7 +73,7 @@ VRAM. The Qwen2.5 architecture is recorded in its
 To run just some settings, supply their IDs:
 
 ```bash
-bash scripts/run_settings.sh --config suites/rtx3060.json \
+bash scripts/results.sh suite --config suites/rtx3060.json \
   --output results/qwen35-settings \
   --settings rtx3060_qwen35_08b_vllm rtx3060_qwen35_08b_sglang
 ```

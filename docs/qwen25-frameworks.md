@@ -24,25 +24,34 @@ SGLang has a [ROCm integration](https://docs.sglang.io/docs/hardware-platforms/a
 but MI210/gfx90a support must be verified for the actual build. These new profiles are
 marked `hardware_pending`: local configuration validation is not physical validation.
 
-Keep each serving framework in its own environment. For A100, the existing
-[platform setup instructions](platforms.md#nvidia) provide SGLang and TensorRT-LLM
-installation commands. The saved NVIDIA dependency snapshots are
-`requirements.sglang.lock.txt` and `requirements.tensorrt.lock.txt`. Restoring the latter
-requires the NVIDIA package index and PyTorch's CUDA 13 wheel index.
-
-The new A100 profiles select the workspace toolchains. Prepare them without a system
-package install, using the existing helper scripts:
+Install the NVIDIA environments from the project root:
 
 ```bash
-python scripts/install_workspace_gcc.py
-python scripts/install_cuda_compiler.py --version 12.8.1  # SGLang
-python scripts/install_cuda_compiler.py --version 13.0.2  # TensorRT-LLM
+bash scripts/install_sglang.sh
+bash scripts/install_tensorrt.sh
 ```
 
-The CUDA 13 TensorRT environment also needs a compatible host NVIDIA driver. These
-helpers do not install or upgrade the driver. Installing CUDA compiler files does not
-make an older host driver compatible. If the host already has a suitable compiler/toolkit,
-a reviewed profile can instead use that toolchain; changes are recorded in provenance.
+These scripts create the suite's `.venv-sglang` and `.venv-trt` environments with
+Python 3.12, restore the pinned dependencies, install the runner, and prepare workspace
+GCC 13 and CUDA compiler files (12.8.1 for SGLang, 13.0.2 for TensorRT-LLM). They need
+Linux x86_64, `python3`, `curl`, network access and writable workspace storage. They
+require no `sudo`, system package installation or bubblewrap. The existing `.venv`
+client/vLLM environment is preserved. Rerunning an installer repairs its own environment
+from the snapshot, so keep custom package changes in a separate environment.
+
+Use `--dry-run` to inspect the commands without downloading or changing files, or
+`--check` to verify an existing installation. Checks cover dependency consistency,
+compiler execution, the PyTorch CUDA build and serving CLI imports. They do not load a
+model or establish inference support on A100. Installation output can be saved with
+`bash scripts/install_sglang.sh 2>&1 | tee sglang-install.log` (use `set -o pipefail`
+if scripting this command). Large framework wheels and their download cache require
+substantial free disk space; these local environments occupy about 11 GB and 15 GB,
+excluding models, toolchains and caches.
+
+The CUDA 13 TensorRT environment needs a compatible host NVIDIA driver. The scripts
+do not install or upgrade the driver; a compiler download cannot supply driver support.
+If installation succeeds but the GPU smoke test fails, inspect that framework's server
+log before starting a full run.
 
 For MI210, prepare ROCm environments using the framework's installation instructions;
 do not apply the NVIDIA lockfiles there. The SGLang profile selects Triton attention and

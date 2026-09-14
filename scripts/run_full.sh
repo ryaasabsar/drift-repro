@@ -18,4 +18,4 @@ python -u -m driftbench_runner judge-safety "$DRIFTBENCH_RESULT_DIR" \
   --device cuda --output "$DRIFTBENCH_RESULT_DIR/safety-labels.jsonl"
 python -u -m driftbench_runner evaluate "$DRIFTBENCH_RESULT_DIR" --code \
   --safety-labels "$DRIFTBENCH_RESULT_DIR/safety-labels.jsonl"
-python scripts/progress.py "$DRIFTBENCH_RESULT_DIR"
+python -m driftbench_runner status "$DRIFTBENCH_RESULT_DIR" --json

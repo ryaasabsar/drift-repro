@@ -5,7 +5,7 @@ its inference and evaluation subprocess events, so the terminal shows the
 active setting and workload without needing to open each subprocess log.
 
 ```bash
-bash scripts/run_settings.sh --config suites/rtx3060.json \
+bash scripts/results.sh suite --config suites/rtx3060.json \
   --output results/my-settings --limit 2
 ```
 
@@ -51,7 +51,7 @@ proof that its process is still alive. `--watch` prints changes at the progress
 interval; `--json --watch` emits one JSON object per changed snapshot. Ctrl-C
 stops watching without stopping the experiment.
 
-The existing command `python scripts/progress.py RUN_DIR` still produces JSON.
+Use `bash scripts/results.sh status RUN_DIR --json` for JSON output.
 Add `--human` for readable output; it now supports suites and `--watch` too.
 
 ## Logs and verbosity
@@ -89,11 +89,11 @@ These flags work before or after the subcommand:
 
 ```bash
 # Quicker updates during an installation check:
-bash scripts/run_settings.sh --config suites/rtx3060.json \
+bash scripts/results.sh suite --config suites/rtx3060.json \
   --output results/quick-check --limit 2 --progress-interval 5
 
 # Show only warnings/errors in the terminal; full runner events still go to files:
-bash scripts/run_settings.sh --config suites/rtx3060.json \
+bash scripts/results.sh suite --config suites/rtx3060.json \
   --output results/my-settings --resume --log-level warning
 ```
 
