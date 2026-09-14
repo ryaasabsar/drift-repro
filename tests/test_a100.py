@@ -28,9 +28,9 @@ def test_a100_plan_pins_models_and_keeps_five_workloads(tmp_path):
 
 
 def test_credential_file_is_data_and_not_forwarded_in_arguments(tmp_path, monkeypatch, capsys):
-    path = tmp_path / 'credentials.json'
+    path = tmp_path / '.env'
     token = 'hf_fixture_$(touch should_not_exist)'
-    path.write_text(json.dumps({'HF_TOKEN': token}))
+    path.write_text('HF_TOKEN=' + json.dumps(token) + '\n')
     monkeypatch.delenv('HF_TOKEN', raising=False)
     a100.load_credentials(path)
     assert os.environ['HF_TOKEN'] == token
@@ -42,16 +42,16 @@ def test_credential_file_is_data_and_not_forwarded_in_arguments(tmp_path, monkey
 
 
 def test_empty_credentials_preserve_exported_token(tmp_path, monkeypatch):
-    path = tmp_path / 'credentials.json'
-    path.write_text('{"HF_TOKEN": ""}')
+    path = tmp_path / '.env'
+    path.write_text('HF_TOKEN=\n')
     monkeypatch.setenv('HF_TOKEN', 'hf_exported_fixture')
     a100.load_credentials(path)
     assert os.environ['HF_TOKEN'] == 'hf_exported_fixture'
 
 
 def test_bad_credentials_do_not_disclose_contents(tmp_path):
-    path = tmp_path / 'credentials.json'
-    path.write_text('{"HF_TOKEN": "private_fixture_token"')
+    path = tmp_path / '.env'
+    path.write_text('HF_TOKEN="private_fixture_token')
     with pytest.raises(ValueError) as error:
         a100.load_credentials(path)
     assert 'private_fixture_token' not in str(error.value)
@@ -114,10 +114,19 @@ def test_shell_wrapper_produces_json_from_other_directory(tmp_path):
 
 
 def test_secret_location_ignored_and_private(tmp_path):
-    assert '/.secrets/' in (ROOT / '.gitignore').read_text().splitlines()
-    path = a100.ensure_credentials_file(tmp_path / '.secrets/huggingface.json')
+    patterns = (ROOT / '.gitignore').read_text().splitlines()
+    assert '/.env' in patterns and '!/.env.example' in patterns
+    path = a100.ensure_credentials_file(tmp_path / 'private/.env')
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
-    path.write_text('{"HF_TOKEN": "hf_fixture_existing"}')
+    path.write_text('HF_TOKEN=hf_fixture_existing\n')
     a100.ensure_credentials_file(path)
-    assert json.loads(path.read_text())['HF_TOKEN'] == 'hf_fixture_existing'
+    assert path.read_text() == 'HF_TOKEN=hf_fixture_existing\n'
+
+
+def test_env_comments_quotes_and_export(tmp_path, monkeypatch):
+    path = tmp_path / '.env'
+    path.write_text('# Local credentials\n\nexport HF_TOKEN = "hf_fixture_${LITERAL}#suffix" # comment\n')
+    monkeypatch.delenv('HF_TOKEN', raising=False)
+    a100.load_credentials(path)
+    assert os.environ['HF_TOKEN'] == 'hf_fixture_${LITERAL}#suffix'

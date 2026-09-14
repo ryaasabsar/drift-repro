@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import sys
 
 from .common import ROOT, WORKLOADS, local_environment, read_json
@@ -11,7 +12,7 @@ from .logging import activity, configure, event
 from .suite import load_plan
 
 SUITE = ROOT / 'suites/a100-qwen25-7b-llamaguard3.json'
-CREDENTIALS = ROOT / '.secrets/huggingface.json'
+CREDENTIALS = ROOT / '.env'
 
 
 def ensure_credentials_file(path=CREDENTIALS):
@@ -22,7 +23,7 @@ def ensure_credentials_file(path=CREDENTIALS):
     except FileExistsError:
         return path
     with os.fdopen(descriptor, 'w') as handle:
-        handle.write('{\n  "HF_TOKEN": ""\n}\n')
+        handle.write('HF_TOKEN=\n')
     return path
 
 
@@ -30,11 +31,23 @@ def load_credentials(path=CREDENTIALS):
     """Read data, never source shell code or include secret values in errors."""
     path = ensure_credentials_file(path)
     try:
-        data = json.loads(path.read_text())
+        data = {}
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if line.startswith('export '):
+                line = line[7:].lstrip()
+            key, separator, value = line.partition('=')
+            key = key.strip()
+            if not separator or key != 'HF_TOKEN' or key in data:
+                raise ValueError
+            values = shlex.split(value, comments=True, posix=True)
+            if len(values) > 1:
+                raise ValueError
+            data[key] = values[0] if values else ''
     except (OSError, ValueError):
-        raise ValueError('Cannot read Hugging Face credentials JSON') from None
-    if not isinstance(data, dict) or set(data) - {'HF_TOKEN'} or not isinstance(data.get('HF_TOKEN', ''), str):
-        raise ValueError('Hugging Face credentials must contain only a string HF_TOKEN')
+        raise ValueError('Cannot read credentials: .env must contain an HF_TOKEN assignment') from None
     token = data.get('HF_TOKEN', '').strip()
     if token:
         os.environ['HF_TOKEN'] = token

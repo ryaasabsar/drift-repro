@@ -10,3 +10,6 @@ results/*
 !results/.gitkeep
 docs/paper.pdf
 /.secrets/
+/.env
+/.env.*
+!/.env.example
