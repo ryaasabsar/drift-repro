@@ -15,12 +15,12 @@ from test_stages import make_run, fake_workers
 
 
 @pytest.mark.parametrize('host,framework,count', [('a100','vllm',3), ('a100','sglang',3),
-    ('mi210','vllm',3), ('mi210','sglang',3), ('blackhole-p150b','vllm',3)])
+    ('mi210','vllm',3), ('mi210','sglang',3), ('blackhole-p150b','vllm',2)])
 def test_framework_selection_contains_only_requested_models(host, framework, count, tmp_path):
     plan = suite.run_suite(ROOT / 'suites' / f'{host}.json', tmp_path / 'run',
                            frameworks=[framework], dry_run=True)
     assert len(plan['settings']) == count
-    assert len({s['config']['model'] for s in plan['settings']}) == 3
+    assert len({s['config']['model'] for s in plan['settings']}) == count
     assert {s['config']['backend'] for s in plan['settings']} == {framework}
     assert set(plan['selected']) == {s['id'] for s in plan['settings']}
     assert not (tmp_path / 'run').exists()

@@ -14,6 +14,14 @@ the immutable commit behind `compat/vllm-0.25.1`. It uses the official install s
 and its documented OpenCV/numpy override. This is a different package from the
 older `tt-vllm-plugin` inside `tt-inference-server`.
 
+The source build reports `vllm==0.25.1+empty`; the installer checks that exact
+build version. The launcher supplies both `HF_MODEL` and `MODEL_WEIGHTS_DIR`
+using the pinned local snapshot, because TT model loaders read these separately
+from vLLM's model argument. Converted weights stay under
+`.cache/tt-models/<revision>/<model>`, and TT runtime logs stay with the run.
+The Qwen3.5 profile reserves 256 MiB for TT execution traces: its prefill warmup
+exceeded the plugin's default 50 MB allocation during the single-card test.
+
 It also installs TTNN 0.77.0, the matching TT-Metal source release, SFPI 7.69.0, CPU PyTorch
 2.11.0, torchvision 0.26.0 and Transformers 5.12.1. The latter versions follow
 TT-Metal 0.77.0's development requirements. This is an explicit package baseline
@@ -78,9 +86,41 @@ pins. It does not establish model/kernel or long-context correctness.
 **Hardware prerequisite:** TT-Metal 0.77.0 documents Blackhole KMD >=2.8.0 and
 firmware 19.8.1. The reported `tt-blackhole-03` versions, KMD 2.6.0-rc1 and firmware
 19.4.2.0, are below that baseline. Creating a Python environment does not resolve
-that mismatch. Before inference, the host provider must supply the required host
-stack or a tested alternative software pairing. This script never updates drivers
+that mismatch. A supported deployment still needs the required host stack or a
+provider-tested alternative pairing; a short inference smoke test does not
+establish full compatibility. This script never updates drivers
 or firmware and does not reset devices.
+
+**Qwen2.5 single-card limitation:** a startup attempt on `tt-blackhole-03` on
+2026-09-15 confirmed that the pinned TT-Metal loader rejects Qwen2.5-7B-Instruct
+on one P150b. Its model implementation requires two or four devices. The existing
+Qwen2.5 P150 profile therefore cannot complete on one card; a connected multi-card
+configuration needs separate validation. The active P150b suite selects only
+Qwen3.5 and Llama; the Qwen2.5 config is retained for reference. The source
+constraint is in [the pinned model configuration](https://github.com/tenstorrent/tt-metal/blob/9f9cd4fd590f4b606bd0981a4fe0b6403eb38ec9/models/tt_transformers/tt/model_config.py#L2792).
+
+## Run Qwen3.5 and Llama on one P150b
+
+On 2026-09-15, `tt-blackhole-03` completed one prompt from each of the five
+workloads for both models through vLLM: 10 saved responses, with sequential
+startup and shutdown on one P150b. Test artifacts are in
+`.archive/runs/p150b-single-card-smoke`. This validates short inference runs;
+the full benchmark, full 32K context, safety judging and code execution were
+not validated by this run.
+
+The default suite runs the two models sequentially. Preserve an assigned
+`TT_VISIBLE_DEVICES` mask, or select a free logical device (the example uses 0):
+
+```bash
+TT_VISIBLE_DEVICES="${TT_VISIBLE_DEVICES:-0}" bash scripts/run_blackhole_p150b.sh \
+  --run-id p150b-vllm-r01 --framework vllm --allow-experimental --limit 1
+```
+
+This saves one response per workload per model under `results/runs/p150b-vllm-r01`.
+Omit `--limit 1` for the full inference benchmark, using a new run ID. The wrapper
+loads the TT environment automatically. First startup converts weights and
+compiles kernels; subsequent runs reuse workspace caches. Evaluation remains a
+separate stage.
 
 References:
 

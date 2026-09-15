@@ -56,6 +56,6 @@
     "references": [
       "https://github.com/tenstorrent/vllm-tt-plugin/tree/compat/vllm-0.25.1"
     ],
-    "note": "Uses the pinned TT plugin and TTNN runtime. Model kernel execution, internal precision and full context on P150b have not been validated here. No substitute checkpoint is used."
+    "note": "Startup on tt-blackhole-03 (2026-09-15) reached the pinned TT model loader, which rejects Qwen2.5-7B on one device and requires two or four. This single-P150 profile cannot complete with TT-Metal 0.77.0. A connected multi-card configuration requires separate validation; no substitute checkpoint is used."
   }
 }

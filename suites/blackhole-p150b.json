@@ -15,11 +15,6 @@
       "server_python": "../.venv-tt-vllm/bin/python"
     },
     {
-      "id": "blackhole_p150b_qwen25_7b_vllm",
-      "config": "../configs/blackhole-p150b-qwen25-7b-vllm-http.json",
-      "server_python": "../.venv-tt-vllm/bin/python"
-    },
-    {
       "id": "blackhole_p150b_llama31_8b_instruct_vllm",
       "config": "../configs/blackhole-p150b-llama31-8b-instruct-vllm-http.json",
       "server_python": "../.venv-tt-vllm/bin/python"

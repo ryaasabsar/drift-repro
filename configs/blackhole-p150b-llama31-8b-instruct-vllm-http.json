@@ -58,6 +58,6 @@
     "references": [
       "https://github.com/tenstorrent/vllm-tt-plugin/tree/compat/vllm-0.25.1"
     ],
-    "note": "Uses the pinned TT plugin and TTNN runtime. Model kernel execution, internal precision and full context on P150b have not been validated here. No substitute checkpoint is used."
+    "note": "Completed vLLM smoke inference on one P150b at tt-blackhole-03 (2026-09-15): one prompt from each of five workloads. Full benchmark, 32K context and internal precision remain unvalidated; host KMD 2.6.0-rc1/firmware 19.4.2.0 are below the runtime's documented baseline."
   }
 }

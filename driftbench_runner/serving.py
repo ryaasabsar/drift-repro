@@ -173,6 +173,14 @@ def serve(config_path, dry_run=False):
             raise RuntimeError("Port is already in use; refusing to attach provenance to someone else's server")
     launch = config.get("launch", {})
     child_env = dict(os.environ)
+    if pinned_snapshot:
+        # TT model loaders read HF_MODEL separately from vLLM's --model.
+        # Pin both to the same snapshot and isolate converted weights by revision.
+        model_env = {"HF_MODEL": str(alias), "MODEL_WEIGHTS_DIR": str(alias),
+                     "TT_CACHE_PATH": str(ROOT / ".cache/tt-models" / config["revision"] / config["model"].split("/")[-1]),
+                     "TT_METAL_LOGS_PATH": str(Path(config["server"]["metadata_path"]).resolve().parent / "tt-runtime")}
+        child_env.update(model_env)
+        environment["runtime_environment"].update(model_env)
     identity = serving_identity(config)
     metadata = {"schema_version": 1, "status": "starting", "created_at": now(), "instance_id": str(uuid.uuid4()),
                 "identity": identity, "serving_fingerprint": digest(identity), "environment": environment,

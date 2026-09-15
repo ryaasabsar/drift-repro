@@ -18,7 +18,10 @@ def test_complete_matrix_and_matching_experimental_controls(tmp_path):
     assert {p.stem for p in (ROOT / 'suites').glob('*.json')} == set(expected)
     for host, backends in expected.items():
         plan = load_plan(ROOT / 'suites' / f'{host}.json', tmp_path / host)
-        assert len(plan['settings']) == 3 * len(backends)
+        assert len(plan['settings']) == (2 if host == 'blackhole-p150b' else 3) * len(backends)
+        if host == 'blackhole-p150b':
+            assert {s['config']['model'] for s in plan['settings']} == {
+                'Qwen/Qwen3.5-9B-Base', 'meta-llama/Llama-3.1-8B-Instruct'}
         assert plan['limit'] is None and plan['expected_records_per_setting'] == 2284
         assert plan['evaluation']['judge_model'] == 'meta-llama/Llama-Guard-3-8B'
         assert plan['evaluation']['judge_device'] == 'cuda'
@@ -61,10 +64,11 @@ def test_complete_matrix_and_matching_experimental_controls(tmp_path):
                 'revision', 'prompt_format', 'chat_template_kwargs', 'seed', 'generation',
                 'batch_size', 'batch_size_by_workload')})
         assert len(combinations) == len(plan['settings'])
-    assert len(seen) == 15
+    assert len(seen) == 14
     assert set(controls) == {'Qwen/Qwen3.5-9B-Base', 'Qwen/Qwen2.5-7B-Instruct',
                              'meta-llama/Llama-3.1-8B-Instruct'}
-    assert all(len(rows) == 5 and all(row == rows[0] for row in rows) for rows in controls.values())
+    assert all(len(rows) == (4 if model == 'Qwen/Qwen2.5-7B-Instruct' else 5)
+               and all(row == rows[0] for row in rows) for model, rows in controls.items())
     assert len(list((ROOT / 'configs').glob('*.json'))) == 15
 
 

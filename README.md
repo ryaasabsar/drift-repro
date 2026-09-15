@@ -10,8 +10,10 @@ controls remain in a portable run folder.
 | AMD MI210 | vLLM, SGLang | `suites/mi210.json` |
 | Tenstorrent Blackhole P150b | TT vLLM | `suites/blackhole-p150b.json` |
 
-Each framework runs **Qwen3.5-9B-Base**, **Qwen2.5-7B-Instruct** and
-**Llama-3.1-8B-Instruct**, with pinned revisions. Base uses raw published prompts;
+A100/MI210 frameworks run **Qwen3.5-9B-Base**, **Qwen2.5-7B-Instruct** and
+**Llama-3.1-8B-Instruct**, with pinned revisions. The single-P150b suite runs
+**Qwen3.5-9B-Base** and **Llama-3.1-8B-Instruct**; the pinned TT Qwen2.5 backend
+requires two or four devices. Base uses raw published prompts;
 Instruct models use their official chat templates. Seed 42, temperature 0,
 neutral sampling penalties, 512 output tokens and one request at a time are
 consistent across settings. Identical output across hardware is not guaranteed.
@@ -37,7 +39,8 @@ bash scripts/run_mi210.sh --run-id mi210-vllm-r01 --framework vllm
 bash scripts/run_blackhole_p150b.sh --run-id p150b-vllm-r01 --framework vllm --allow-experimental
 ```
 
-`--framework vllm` runs vLLM on **all three models**. Use `--framework sglang` on
+`--framework vllm` runs vLLM on all models in the selected suite (three on
+A100/MI210, two on a single P150b). Use `--framework sglang` on
 A100/MI210, or omit the filter to run every framework available in that suite.
 `--settings ID...` optionally narrows the selection further. Filtered runs contain
 only the selected settings, so they can be evaluated and transferred as complete runs.
@@ -151,7 +154,9 @@ This adapts [DriftBench](https://openreview.net/forum?id=Xfzzp6grRP) and its
 has 1,000 chat inputs whereas the paper reports 973; all published inputs are
 retained. See [methodology](docs/methodology.md) for differences and limitations.
 
-The production 7–9B models still need validation on each target runtime, particularly
-MI210 and P150b. Local checks use the RTX machine and a cached small model.
+Qwen3.5-9B-Base and Llama-3.1-8B-Instruct passed single-P150b vLLM smoke inference
+on 2026-09-15: one prompt per workload per model, 10 responses total. See
+[the tested P150b setup](docs/tt-vllm-install.md#run-qwen35-and-llama-on-one-p150b).
+Full benchmark and full-context validation remain pending; MI210 is unverified.
 Focused regression checks live in `.archive/checks`; generated test artifacts and
 historical experiments remain ignored under `.archive`.

@@ -284,7 +284,8 @@ from packaging.utils import canonicalize_name
 
 target = Path(sys.argv[1])
 assert sys.version_info[:2] == (3, 12), "Expected Python 3.12"
-expected = {"vllm": "0.25.1", "vllm-tt-plugin": "0.1.0", "ttnn": "0.77.0",
+# The VLLM_TARGET_DEVICE=empty source build includes its target in the version.
+expected = {"vllm": "0.25.1+empty", "vllm-tt-plugin": "0.1.0", "ttnn": "0.77.0",
             "torch": "2.11.0+cpu", "torchvision": "0.26.0+cpu", "transformers": "5.12.1"}
 for name, version in expected.items():
     actual = metadata.version(name)
