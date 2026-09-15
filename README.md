@@ -29,6 +29,10 @@ This installs Python 3.12.14 and `requirements.client.lock.txt` into `.venv-clie
 It does not install Torch, accelerator drivers or Bubblewrap. Serving processes
 use the separate Python paths in each suite. See [host setup](docs/setup.md).
 
+On MI210 with ROCm 7.0, create the vLLM serving environment using
+`bash scripts/install_rocm_vllm.sh`, then run
+`bash scripts/install_rocm_vllm.sh --check-gpu` inside the allocated GPU job.
+
 Choose the command for the inference machine:
 
 ```bash
@@ -50,8 +54,9 @@ Inference never loads the safety judge or executes generated code.
 
 **Comparability:** the tokenizer client, prompts and sampling controls match.
 Serving dependencies cannot all be identical across vendors/frameworks:
-NVIDIA/AMD target the same upstream releases, while the pinned TT plugin needs
-vLLM 0.25.1 instead of 0.17.1. SGLang and vLLM also require different Torch and
+NVIDIA/AMD use vLLM 0.17.1, but its official ROCm wheels require Torch 2.9.1
+versus NVIDIA's 2.10.0. The pinned TT plugin needs vLLM 0.25.1 instead of 0.17.1.
+SGLang and vLLM also require different Torch and
 Transformers versions. `runtime-contracts.json` declares these differences;
 startup checks the core versions, and manifests record all installed package
 versions, client versions, driver information and runner source identity.

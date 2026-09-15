@@ -63,7 +63,9 @@ runner source hash and the lockfile hash. Resume refuses a changed client.
 `runtime-contracts.json` specifies the expected upstream core releases per
 vendor/framework. CUDA 12.8 is required in the NVIDIA serving baseline; AMD uses
 corresponding ROCm builds. The TT plugin uses vLLM 0.25.1/Torch 2.11.0 rather than
-the NVIDIA/AMD vLLM baseline 0.17.1/Torch 2.10.0. SGLang has its own dependency
+the NVIDIA vLLM baseline 0.17.1/Torch 2.10.0. AMD uses the official vLLM 0.17.1
+ROCm wheel with Torch 2.9.1; that difference is part of cross-vendor comparisons.
+SGLang has its own dependency
 baseline. These declared native-stack differences remain confounds; version
 checks do not prove identical kernels or numerical precision.
 

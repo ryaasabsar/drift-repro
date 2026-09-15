@@ -1,0 +1,22 @@
+# Native pair from https://wheels.vllm.ai/rocm/0.17.1/rocm700/
+# Use scripts/install_rocm_vllm.sh to select the matching native dependencies.
+vllm==0.17.1+rocm700
+torch==2.9.1+git8907517
+# Shared with the NVIDIA vLLM environment and common tokenizer client.
+transformers==4.57.6
+tokenizers==0.22.2
+huggingface-hub==0.36.2
+sentencepiece==0.2.2
+numpy==2.2.6
+jinja2==3.1.6
+# Match NVIDIA's application dependencies where the ROCm index permits it.
+anthropic==1.4.0
+fastapi-cloud-cli==0.25.0
+httpcore2==2.12.0
+httpx2==2.12.0
+jiter==0.16.0
+pyjwt==2.13.0
+regex==2026.9.3
+tqdm==4.70.0
+uvicorn==0.52.4
+# The generated requirements.rocm-vllm.lock.txt pins the full dependency set.

@@ -60,24 +60,56 @@ The default paths in `suites/mi210.json` are:
 .venv-rocm-sglang/bin/python
 ```
 
-Install the runner into each existing vendor environment without replacing its
-PyTorch/framework dependencies:
+For vLLM on a ROCm 7.0 host (Linux x86_64, glibc >=2.35), run:
 
 ```bash
-.tools/uv pip install --python .venv-rocm-vllm/bin/python --no-deps -e .
+bash scripts/bootstrap.sh --client-only
+bash scripts/install_rocm_vllm.sh
+# Inside the allocated MI210 job:
+bash scripts/install_rocm_vllm.sh --check-gpu
+bash scripts/run_mi210.sh --framework vllm --limit 2 --run-id mi210-vllm-smoke
+```
+
+The installer creates `.venv-rocm-vllm` with workspace-managed Python 3.12.14,
+the official `vllm==0.17.1+rocm700` / `torch==2.9.1+git8907517` wheel pair,
+and the same Transformers, tokenizers, Hugging Face Hub, SentencePiece, NumPy and
+Jinja2 versions as NVIDIA vLLM. It installs the runner, checks dependencies and
+native imports, and records resolved packages in
+`.venv-rocm-vllm/installed-packages.txt`. `--dry-run` previews installation;
+`--check` checks existing packages without a GPU calculation. The GPU check tests
+calculations and Triton initialization, not full model inference. The installer
+syncs the complete `requirements.rocm-vllm.lock.txt`, like NVIDIA's locked setup;
+`requirements.rocm-vllm.in` contains the source pins. It aligns application
+dependencies with NVIDIA where compatible with the ROCm wheel set. No sudo or
+CUDA toolkit installation is needed. ROCm's upstream dependencies currently pull
+in `cupy-cuda12x` through Ray; this does not change the serving backend from ROCm.
+Existing environments are reused and their packages synced to the lock, not
+deleted; an incompatible Python version is rejected.
+
+The lock matches 153 shared package versions with NVIDIA. Besides the ROCm
+build suffix on vLLM, the shared packages that differ are Torch, TorchAudio,
+TorchVision, Triton, fsspec, grpcio, grpcio-reflection and setuptools. These
+versions come from the official ROCm index; they remain visible in run provenance.
+
+SGLang still requires a separately prepared ROCm environment. Install the runner
+there without replacing its native dependencies:
+
+```bash
 .tools/uv pip install --python .venv-rocm-sglang/bin/python --no-deps -e .
 ```
 
 If your approved ROCm environments live elsewhere, change the two `server_python`
 paths in the suite before beginning a run. Keep the serving versions and host
 ROCm stack matched; model-specific Qwen3.5 hybrid-attention kernel support on
-gfx90a still requires execution on MI210. This repository does not provide a
-locally validated ROCm binary distribution. Consult the official
+gfx90a still requires execution on MI210. The installer uses upstream wheels;
+they have not been validated on MI210 in this workspace. Consult the official
 [vLLM ROCm installation guide](https://docs.vllm.ai/en/stable/getting_started/installation/gpu/)
 and [SGLang AMD guide](https://docs.sglang.io/docs/hardware-platforms/amd_gpu)
 for the serving build; verify that the selected build targets gfx90a.
 
-Use `bash scripts/run_mi210.sh --run-id mi210-r01`. The wrapper uses `.venv-client` for prompt preparation and orchestration, and the suite's ROCm interpreters for serving.
+After the smoke run passes, use `bash scripts/run_mi210.sh --framework vllm --run-id mi210-vllm-r01`.
+Omit the framework filter only after both serving environments are installed.
+The wrapper uses `.venv-client` for prompt preparation and orchestration, and the suite's ROCm interpreters for serving.
 No judge or HumanEval runs here. Transfer complete inference to A100 for safety.
 
 ## Blackhole P150b
@@ -129,12 +161,15 @@ comparisons expose different benchmark-client implementations.
 
 | Serving stack | Framework | Torch release | Transformers |
 |---|---|---|---|
-| NVIDIA / AMD vLLM | 0.17.1 | 2.10.0 | 4.57.6 |
+| NVIDIA vLLM | 0.17.1 | 2.10.0 | 4.57.6 |
+| AMD vLLM (ROCm 7.0 wheels) | 0.17.1 | 2.9.1 | 4.57.6 |
 | NVIDIA / AMD SGLang | 0.5.10.post1 | 2.9.1 | 5.3.0 |
 | TT vLLM | 0.25.1 | 2.11.0 CPU | 5.12.1 |
 
-NVIDIA uses CUDA 12.8 builds; AMD requires corresponding ROCm builds, with actual
-build suffixes/ROCm versions recorded. These AMD release targets are a comparison
+NVIDIA uses CUDA 12.8 builds; AMD requires ROCm builds, with actual
+build suffixes/ROCm versions recorded. The official vLLM ROCm wheel's matching
+PyTorch differs from NVIDIA; keep that native pair together and treat the
+comparison as including a PyTorch change. These AMD release targets are a comparison
 contract, not a claim that a prebuilt MI210 wheel exists for every model. Use the
 vendor build instructions and check with `doctor --suite suites/mi210.json`.
 If a required vendor stack cannot meet a pin, record a deliberate change in

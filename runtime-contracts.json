@@ -27,11 +27,11 @@
     "amd/vllm": {
       "packages": {
         "vllm": "0.17.1",
-        "torch": "2.10.0",
+        "torch": "2.9.1",
         "transformers": "4.57.6",
         "tokenizers": "0.22.2"
       },
-      "note": "Match NVIDIA upstream releases with ROCm builds. MI210 model/kernel support requires host validation; CUDA lockfiles must not be installed here."
+      "note": "Official vLLM 0.17.1 ROCm 7.0 wheels use PyTorch 2.9.1, unlike NVIDIA's 2.10.0. Cross-vendor comparisons include that software difference. MI210 model/kernel support requires host validation."
     },
     "amd/sglang": {
       "packages": {
