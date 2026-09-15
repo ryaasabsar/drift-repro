@@ -1,22 +1,22 @@
 # Follow an experiment
 
 Normal commands now report timestamped stages to **stderr**. The suite relays
-its inference and evaluation subprocess events, so the terminal shows the
+its serving and inference subprocess events, so the terminal shows the
 active setting and workload without needing to open each subprocess log.
 
 ```bash
-bash scripts/results.sh suite --config suites/rtx3060.json \
-  --output results/my-settings --limit 2
+bash scripts/results.sh infer --config suites/a100.json \
+  --run-id a100-r01
 ```
 
 The output identifies the setting's position in the selected list, model and
 framework, then follows startup, prompt preparation, warmup, inference, server
-shutdown, evaluation, table export and comparison. For example:
+shutdown and table export. The separate stage and compare commands report their own progress. For example:
 
 ```text
-[12:04:00Z] INFO    | [rtx3060_qwen35_08b_vllm] | suite | Setting started | position=1/4 | model=Qwen/Qwen3.5-0.8B | framework=vllm
-[12:04:15Z] INFO    | [rtx3060_qwen35_08b_vllm] | startup | Waiting for server health check — still working | elapsed 15s | ...
-[12:05:30Z] INFO    | [rtx3060_qwen35_08b_vllm] | inference/math | Responses saved | 4/10 (40.0%) | elapsed 18s | ... | workload_saved=2/2
+[12:04:00Z] INFO    | [a100_qwen35_9b_base_vllm] | suite | Setting started | position=1/6 | model=Qwen/Qwen3.5-9B-Base | framework=vllm
+[12:04:15Z] INFO    | [a100_qwen35_9b_base_vllm] | startup | Waiting for server health check — still working | elapsed 15s | ...
+[12:05:30Z] INFO    | [a100_qwen35_9b_base_vllm] | inference/math | Responses saved | 4/10 (40.0%) | elapsed 18s | ... | workload_saved=2/2
 ```
 
 Times use UTC (`Z`). Inference percentages count **saved responses across the
@@ -38,9 +38,9 @@ update after each side finishes encoding.
 
 ```bash
 source scripts/env.sh
-python -m driftbench_runner status results/my-settings
-python -m driftbench_runner status results/my-settings --watch
-python -m driftbench_runner status results/my-settings --json
+python -m driftbench_runner status results/runs/a100-r01
+python -m driftbench_runner status results/runs/a100-r01 --watch
+python -m driftbench_runner status results/runs/a100-r01 --json
 ```
 
 `status` accepts a suite directory or an individual setting directory. It shows
@@ -52,7 +52,7 @@ interval; `--json --watch` emits one JSON object per changed snapshot. Ctrl-C
 stops watching without stopping the experiment.
 
 Use `bash scripts/results.sh status RUN_DIR --json` for JSON output.
-Add `--human` for readable output; it now supports suites and `--watch` too.
+Omit `--json` for readable output; `--watch` follows changes.
 
 ## Logs and verbosity
 
@@ -61,40 +61,32 @@ are not replayed to the console. Experimental manifests, response files and
 scoring formats remain separate from logging.
 
 ```text
-results/my-settings/
+results/runs/a100-r01/
   logs/suite.log                    # readable events, including relayed child events
   logs/suite.events.jsonl           # the same events as structured records
   settings/SETTING/
     server.log                     # full serving-framework diagnostics
     launcher.log                   # launcher output and failures
     inference.log                  # full inference subprocess output
-    evaluation.log                 # full evaluation subprocess output
     logs/launcher.events.jsonl
     logs/inference.events.jsonl
-    logs/evaluation.events.jsonl
   comparisons/PAIR/
     comparison.log                 # full comparison subprocess output
     logs/comparison.events.jsonl
 ```
 
-Standalone `run`, `score`, `evaluate`, `judge-safety`, `compare`, `collect` and
-`export` commands append `logs/COMMAND.log` and `logs/COMMAND.events.jsonl` in
-their result directory (or source run for evaluation/export). Standalone `serve`
-uses the server metadata directory. The single-setting `run_served.sh` wrapper
-also relays launcher events while waiting for readiness. Third-party output
-from standalone engines or evaluator libraries may still appear on their
-console; the managed suite keeps it in the subprocess logs, including comparisons.
+Standalone `run`, `stage`, `compare`, `collect` and `export` commands append logs in their output or run directory. `serve` uses the server metadata directory. Raw serving output is saved in each setting's `server.log`.
 
 These flags work before or after the subcommand:
 
 ```bash
 # Quicker updates during an installation check:
-bash scripts/results.sh suite --config suites/rtx3060.json \
-  --output results/quick-check --limit 2 --progress-interval 5
+bash scripts/results.sh infer --config suites/a100.json \
+  --run-id a100-r01 --progress-interval 5
 
 # Show only warnings/errors in the terminal; full runner events still go to files:
-bash scripts/results.sh suite --config suites/rtx3060.json \
-  --output results/my-settings --resume --log-level warning
+bash scripts/results.sh infer --config suites/a100.json \
+  --run-id a100-r01 --resume --log-level warning
 ```
 
 `--log-level debug` includes exception details in the terminal. With normal
@@ -110,22 +102,3 @@ Normal progress events do not include prompts, model responses or credentials;
 raw framework/error logs may include library diagnostics. JSON output from
 `preflight`, `doctor`, `suite --dry-run` and `status --json` stays on stdout, so
 redirecting it to a file remains valid. Dry runs create no default log files.
-
-## Validation
-
-All [69 tests passed](../results/logging-tests.log), including subprocess event
-forwarding, readable failures, partial-line handling, resume counts, JSON-only
-stdout, comparison subprocesses and isolated code evaluation.
-
-A fresh one-prompt Qwen3.5/vLLM run on the RTX 3060 exercised startup, inference,
-shutdown, scoring and collection. The [suite log](../results/logging-validation-nvidia/logs/suite.log)
-also records a completed resume that preserved the hashes and timestamps of all
-five inference, evaluation and server evidence files. Its suite status is
-`partial` because the other three settings were deliberately unselected.
-
-Copies of ten existing responses covered all five evaluation workloads and a
-managed semantic comparison. Both embedding sides reported 2/2 at completion;
-source responses were unchanged. See the
-[comparison log](../results/logging-validation-comparison-managed/logs/parent.log)
-and [validation report](../results/logging-validation-report.json). No GPU compute
-process or validation API endpoint remained running afterward.

@@ -18,8 +18,8 @@ On A100:
 
 ```bash
 bash scripts/results.sh infer \
-  --config suites/a100-qwen25-7b-llamaguard3.json \
-  --run-id a100-qwen25-7b-vllm-r01
+  --config suites/a100.json \
+  --run-id a100-r01
 ```
 
 This is **inference only**: no safety model or Bubblewrap check runs. Add `--limit 2`
@@ -27,14 +27,14 @@ for a ten-response smoke run, and give it a different run ID. Use `--dry-run` to
 the plan without downloads or accelerator access. Resume interrupted inference with the
 same command plus `--resume`, on the original host and at the original output path.
 
-For MI210 select `suites/mi210-qwen25-7b-llamaguard3.json`. For Blackhole select
-`suites/blackhole-p150b-qwen25-7b-llamaguard3.json` and add `--allow-experimental`:
+For MI210 select `suites/mi210.json`. For Blackhole select
+`suites/blackhole-p150b.json` and add `--allow-experimental`:
 that model/board combination is still unverified and requires compatible TT kernels.
-Existing RTX suites work through the same command. Choose a new run ID for every repeat
+RTX inference experiments are archived; RTX is the code/final evaluation host. Choose a new run ID for every repeat
 or changed setup; defaults go under `results/runs/` (`--output-root` changes that parent).
 
 ```text
-results/runs/a100-qwen25-7b-vllm-r01/
+results/runs/a100-r01/
   suite.json
   stages.json
   settings/a100_qwen25_7b_vllm/
@@ -63,7 +63,7 @@ find responses on the next machine. Imported runs are for evaluation, not infere
 If inference ran on A100, no transfer is needed yet:
 
 ```bash
-bash scripts/results.sh stage safety results/runs/a100-qwen25-7b-vllm-r01
+bash scripts/results.sh stage safety results/runs/a100-r01
 ```
 
 This defaults to the locked `meta-llama/Llama-Guard-3-8B` revision and GPU evaluation.
@@ -82,16 +82,16 @@ saved labels when outputs and judge environment match; mismatches are rejected.
 On the sending machine, after the current stage finishes:
 
 ```bash
-bash scripts/results.sh pack results/runs/a100-qwen25-7b-vllm-r01 \
-  --output results/transfers/a100-qwen25-7b-vllm-r01-safety.tar.gz
+bash scripts/results.sh pack results/runs/a100-r01 \
+  --output results/transfers/a100-r01-safety.tar.gz
 ```
 
 Move these two files together, for example through the host's file download interface
 or as GitHub Release assets:
 
 ```text
-a100-qwen25-7b-vllm-r01-safety.tar.gz
-a100-qwen25-7b-vllm-r01-safety.tar.gz.sha256
+a100-r01-safety.tar.gz
+a100-r01-safety.tar.gz.sha256
 ```
 
 The bundle contains manifests, responses, stage artifacts, and the **exact benchmark
@@ -105,16 +105,16 @@ On the receiving RTX 3060 system:
 
 ```bash
 bash scripts/results.sh unpack \
-  results/transfers/a100-qwen25-7b-vllm-r01-safety.tar.gz \
-  --output results/runs/a100-qwen25-7b-vllm-r01
+  results/transfers/a100-r01-safety.tar.gz \
+  --output results/runs/a100-r01
 
-bash scripts/results.sh stage status results/runs/a100-qwen25-7b-vllm-r01
+bash scripts/results.sh stage status results/runs/a100-r01
 ```
 
 Unpacking verifies the outer checksum, every included file, inference identities, and
 available evaluation artifacts. It refuses an existing destination and unsafe archive
 paths. Use a **new destination** when receiving a later stage of the same run, e.g.
-`results/runs/a100-qwen25-7b-vllm-r01-after-code`. Renaming the outer folder does not
+`results/runs/a100-r01-after-code`. Renaming the outer folder does not
 change the experiment identity. Checksum verification detects transfer corruption;
 it is not an authenticity signature.
 
@@ -123,8 +123,8 @@ it is not an authenticity signature.
 On the RTX 3060 system with a working Bubblewrap sandbox:
 
 ```bash
-bash scripts/results.sh stage code results/runs/a100-qwen25-7b-vllm-r01
-bash scripts/results.sh stage final results/runs/a100-qwen25-7b-vllm-r01
+bash scripts/results.sh stage code results/runs/a100-r01
+bash scripts/results.sh stage final results/runs/a100-r01
 ```
 
 `code` evaluates only HumanEval on CPU. It appends one result per response, resumes missing
@@ -150,8 +150,8 @@ On your analysis machine, use the setting directories (not the suite root):
 
 ```bash
 bash scripts/results.sh compare \
-  results/runs/a100-qwen25-7b-vllm-r01/settings/a100_qwen25_7b_vllm \
-  results/runs/mi210-qwen25-7b-vllm-r01/settings/mi210_qwen25_7b_vllm \
+  results/runs/a100-r01/settings/a100_qwen25_7b_vllm \
+  results/runs/mi210-r01/settings/mi210_qwen25_7b_vllm \
   --semantic --allow-confounded \
   --output results/comparisons/a100-vs-mi210-qwen25-7b
 ```
@@ -174,5 +174,4 @@ same run/suite locks used by inference.
 
 Old result folders produced by `run_a100.sh --inference-only` can also be packed and
 staged. Keep matching benchmark files in the source checkout for the initial pack;
-thereafter they travel inside the bundle. Existing one-shot `score`/`evaluate` commands
-remain available, but use `stage` consistently for this portable workflow.
+thereafter they travel inside the bundle. Use `stage` for all new evaluation work; one-shot scoring has been removed from the active CLI.

@@ -100,6 +100,19 @@ d = distribution("ttnn")
 assert d.version == "0.77.0", "SFPI pin requires TTNN 0.77.0"
 p = Path(d.locate_file("ttnn")).resolve()
 assert (p / "__init__.py").is_file(), f"Missing TTNN wheel: {p}"
+required = [
+    "toolchain/blackhole/firmware_ierisc.ld",
+    "toolchain/blackhole/firmware_main_aerisc.ld",
+    "toolchain/blackhole/firmware_brisc.ld",
+    "lib/blackhole/tmu-crt0.o",
+    "lib/blackhole/noc.o",
+    "lib/blackhole/substitutes.o",
+]
+missing = [str(p / "runtime/hw" / name) for name in required
+           if not (p / "runtime/hw" / name).is_file()]
+if missing:
+    raise RuntimeError("TTNN wheel is missing Blackhole runtime assets; repair the TTNN 0.77.0 installation:\n"
+                       + "\n".join(missing))
 print(p)
 PY
     )
@@ -151,6 +164,19 @@ print("SFPI Blackhole compilation probe passed (no device opened).")
 PY
 )
 
+write_activation() {
+    if $dry_run || $check_only; then return; fi
+    {
+        printf 'source %q\n' "$target/bin/activate"
+        printf 'export TT_METAL_HOME=%q\n' "$metal"
+        # A source checkout provides models.*, not the built firmware runtime.
+        # With no override, TTNN selects its wheel's bundled runtime assets.
+        printf 'unset TT_METAL_RUNTIME_ROOT\n'
+        printf 'export DRIFTBENCH_PYTHON=%q\n' "$target/bin/python"
+        printf 'unset VLLM_TARGET_DEVICE\n'
+    } > "$target/activate-tt.sh"
+}
+
 # Override an activated CUDA/ROCm environment when invoking uv and subprocesses.
 export UV_CACHE_DIR="$root/.cache/uv"
 export UV_PYTHON_INSTALL_DIR="$root/.tools/python"
@@ -161,7 +187,7 @@ export UV_TORCH_BACKEND=cpu
 export PATH="$target/bin:$root/.tools:$PATH"
 export VLLM_TARGET_DEVICE=empty
 export TT_METAL_HOME="$metal"
-export TT_METAL_RUNTIME_ROOT="$metal"
+unset TT_METAL_RUNTIME_ROOT
 export PYTHONPATH="$root"
 
 echo 'TT environment: Python 3.12, vLLM 0.25.1, TTNN 0.77.0, CPU PyTorch 2.11.0.'
@@ -181,10 +207,12 @@ if ! $check_only; then
 fi
 if $toolchain_only; then
     setup_sfpi
+    write_activation
     if $dry_run; then
         echo 'Compiler repair plan complete; nothing changed.'
     else
         echo 'Compiler check passed. Python packages and host drivers were not changed.'
+        printf 'Activate the corrected runtime: source %q\n' "$target/activate-tt.sh"
     fi
     exit 0
 fi
@@ -231,13 +259,7 @@ import sys
 import sysconfig
 Path(sysconfig.get_path("purelib"), "driftbench_tt_models.pth").write_text(sys.argv[1] + "\n")
 PY
-        {
-            printf 'source %q\n' "$target/bin/activate"
-            printf 'export TT_METAL_HOME=%q\n' "$metal"
-            printf 'export TT_METAL_RUNTIME_ROOT=%q\n' "$metal"
-            printf 'export DRIFTBENCH_PYTHON=%q\n' "$target/bin/python"
-            printf 'unset VLLM_TARGET_DEVICE\n'
-        } > "$target/activate-tt.sh"
+        write_activation
     fi
 fi
 

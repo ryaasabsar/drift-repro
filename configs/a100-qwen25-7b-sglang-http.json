@@ -6,26 +6,31 @@
   "prompt_format": "chat",
   "chat_template_kwargs": {},
   "seed": 42,
-  "batch_size": 16,
+  "batch_size": 1,
   "generation": {
     "temperature": 0.0,
     "top_p": 1.0,
     "top_k": -1,
     "max_tokens": 512,
-    "repetition_penalty": 1.0
+    "repetition_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "min_p": 0.0
   },
   "engine": {
     "dtype": "bfloat16",
     "max_model_len": 32768,
     "tensor_parallel_size": 1,
     "mem_fraction_static": 0.8,
-    "max_running_requests": 16,
+    "max_running_requests": 1,
     "chunked_prefill_size": 2048,
     "disable_radix_cache": true,
     "disable_cuda_graph": true,
     "attention_backend": "triton",
     "disable_overlap_schedule": true,
-    "disable_piecewise_cuda_graph": true
+    "disable_piecewise_cuda_graph": true,
+    "enable_deterministic_inference": true,
+    "sampling_defaults": "openai"
   },
   "batch_size_by_workload": {
     "long_context": 1
@@ -33,7 +38,7 @@
   "transport": "http",
   "hardware": {
     "vendor": "nvidia",
-    "device": "NVIDIA A100 40GB or 80GB"
+    "device": "NVIDIA A100 40GB"
   },
   "server": {
     "base_url": "http://127.0.0.1:8002",
@@ -43,11 +48,15 @@
   "launch": {
     "startup_timeout_seconds": 900,
     "cuda_version": "12.8.1",
-    "workspace_gcc": true
+    "workspace_gcc": true,
+    "env": {
+      "PYTHONHASHSEED": "42",
+      "CUBLAS_WORKSPACE_CONFIG": ":4096:8"
+    }
   },
   "validation": {
-    "status": "hardware_pending",
+    "status": "reproducibility_controls_pending",
     "reference_sglang_version": "0.5.10.post1",
-    "note": "Prepared for SGLang 0.5.10.post1 with workspace CUDA 12.8.1 and GCC 13. Qwen2 implementation is present; A100 7B inference remains unvalidated."
+    "note": "Earlier A100 vLLM/SGLang operation was reported working by the user. These updated sampling, concurrency and determinism controls require a new A100 run; no A100 execution was performed locally."
   }
 }

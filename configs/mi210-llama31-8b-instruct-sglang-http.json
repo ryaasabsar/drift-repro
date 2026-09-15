@@ -6,26 +6,31 @@
   "prompt_format": "chat",
   "chat_template_kwargs": {},
   "seed": 42,
-  "batch_size": 16,
+  "batch_size": 1,
   "generation": {
     "temperature": 0.0,
     "top_p": 1.0,
     "top_k": -1,
     "max_tokens": 512,
-    "repetition_penalty": 1.0
+    "repetition_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "min_p": 0.0
   },
   "engine": {
     "dtype": "bfloat16",
     "max_model_len": 32768,
     "tensor_parallel_size": 1,
     "mem_fraction_static": 0.8,
-    "max_running_requests": 16,
+    "max_running_requests": 1,
     "chunked_prefill_size": 2048,
     "disable_radix_cache": true,
     "disable_cuda_graph": true,
     "attention_backend": "triton",
     "disable_overlap_schedule": true,
-    "disable_piecewise_cuda_graph": true
+    "disable_piecewise_cuda_graph": true,
+    "enable_deterministic_inference": true,
+    "sampling_defaults": "openai"
   },
   "batch_size_by_workload": {
     "long_context": 1
@@ -43,7 +48,8 @@
   "launch": {
     "startup_timeout_seconds": 900,
     "env": {
-      "SGLANG_USE_AITER": "0"
+      "SGLANG_USE_AITER": "0",
+      "PYTHONHASHSEED": "42"
     }
   },
   "validation": {

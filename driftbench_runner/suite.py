@@ -12,7 +12,7 @@ import time
 from .common import ROOT, WORKLOADS, digest, keyed, load_workloads, now, read_json, write_json
 from .evaluation import load_run
 from .hardware import validate_target
-from .scoring import DEFAULT_JUDGE, evaluation_complete
+from .scoring import DEFAULT_JUDGE
 from .serving import launch_command
 from .tables import collect_runs, export_run
 from .logging import EventFollower, activity, event, progress_interval
@@ -68,7 +68,7 @@ def load_plan(config_path, output_dir, limit=None, workloads=None, device=None):
                          "config_path": str(run_dir / "config.json"), "run_dir": str(run_dir)})
     if not settings or len(vendors) != 1:
         raise ValueError("A suite must have settings for one accelerator vendor on this host")
-    evaluation = {"judge_model": DEFAULT_JUDGE, "judge_revision": None, "judge_device": "cpu", "code": True,
+    evaluation = {"judge_model": DEFAULT_JUDGE, "judge_revision": None, "judge_device": "cuda", "code": True,
                   **spec.get("evaluation", {})}
     if set(evaluation) - {"judge_model", "judge_revision", "judge_device", "code"}:
         raise ValueError("Unknown evaluation settings")
@@ -180,10 +180,6 @@ def run_inference(item, plan, resume, environment):
         command += ["--limit", str(plan["limit"])]
     if resume and (run_dir / "manifest.json").exists():
         command.append("--resume")
-    if item["config"].get("transport", "offline") == "offline":
-        command[0] = item["server_python"]
-        run_command(command, run_dir / "inference.log", environment)
-        return
     with (run_dir / "launcher.log").open("a") as log:
         started = time.time()
         events_path = run_dir / "logs/launcher.events.jsonl"
@@ -225,7 +221,7 @@ def run_inference(item, plan, resume, environment):
 
 
 def run_suite(config_path, output_dir, selected=None, limit=None, workloads=None, device=None,
-              resume=False, dry_run=False, inference_only=False, continue_on_error=False):
+              resume=False, dry_run=False, inference_only=True, continue_on_error=False):
     plan = load_plan(config_path, output_dir, limit, workloads, device)
     ids = {item["id"] for item in plan["settings"]}
     selected = set(selected or ids)
@@ -307,30 +303,11 @@ def _run_suite_locked(plan, out, selected, resume, inference_only, continue_on_e
                         raise RuntimeError("Inference command returned without a complete run")
                 else:
                     event("Reusing completed inference", stage="resume", setting=sid, completed=plan['expected_records_per_setting'])
-                if not inference_only and not (resume and evaluation_complete(directory, plan["evaluation"])):
-                    entry["status"] = "evaluating"
-                    write_json(state_path, state)
-                    event("Evaluating after server shutdown", stage="evaluation", setting=sid,
-                          judge=plan["evaluation"]["judge_model"], device=plan["evaluation"]["judge_device"])
-                    ev = plan["evaluation"]
-                    command = [sys.executable, "-m", "driftbench_runner", "score", str(directory),
-                               "--judge-model", ev["judge_model"], "--judge-device", ev["judge_device"]]
-                    if ev["judge_revision"]:
-                        command += ["--judge-revision", ev["judge_revision"]]
-                    if not ev["code"]:
-                        command.append("--skip-code")
-                    run_command(command, directory / "evaluation.log", environment)
-                elif not inference_only:
-                    event("Reusing completed evaluation", stage="resume", setting=sid)
-                else:
-                    event("Evaluation deferred by --inference-only", stage="evaluation", setting=sid)
+                event("Evaluation deferred to the safety/code/final stages", stage="evaluation", setting=sid)
                 export_run(directory)
-                entry.update(status="inference_complete" if inference_only else
-                             ("complete" if evaluation_complete(directory, plan["evaluation"]) else "needs_evaluation"), updated_at=now())
-                if entry["status"] == "needs_evaluation":
-                    failed = True
+                entry.update(status="inference_complete", updated_at=now())
                 event("Setting finished", stage="suite", setting=sid, status=entry['status'],
-                      level="warning" if entry['status'] == "needs_evaluation" else "info", rows=str(directory / 'tables/rows.csv'))
+                      rows=str(directory / 'tables/rows.csv'))
             except Exception as exc:
                 failed = True
                 entry.update(status="failed", error=f"{type(exc).__name__}: {exc}", updated_at=now())
@@ -342,35 +319,9 @@ def _run_suite_locked(plan, out, selected, resume, inference_only, continue_on_e
                 raise
             finally:
                 write_json(state_path, state)
-        comparison_states = {}
-        if not inference_only:
-            for pair in plan["comparisons"]:
-                a, b = pair["baseline"], pair["candidate"]
-                name = a + "__vs__" + b
-                if state["settings"][a]["status"] != "complete" or state["settings"][b]["status"] != "complete":
-                    comparison_states[name] = "waiting_for_settings"
-                    event("Comparison waiting for completed settings", stage="comparison", baseline=a, candidate=b)
-                    continue
-                try:
-                    comparison_dir = out / "comparisons" / name
-                    comparison_dir.mkdir(parents=True, exist_ok=True)
-                    command = [sys.executable, "-m", "driftbench_runner", "compare", str(out / "settings" / a),
-                               str(out / "settings" / b), "--output", str(comparison_dir)]
-                    if pair.get("semantic", False):
-                        command.append("--semantic")
-                    if pair.get("allow_confounded", False):
-                        command.append("--allow-confounded")
-                    run_command(command, comparison_dir / "comparison.log", dict(os.environ))
-                    comparison_states[name] = "complete"
-                except Exception as exc:
-                    event("Comparison failed", stage="comparison", level="error", baseline=a, candidate=b, error=str(exc))
-                    comparison_states[name] = f"failed: {exc}"
-                    failed = True
-                    if not continue_on_error:
-                        raise
-        state["comparisons"] = comparison_states
         states = [e["status"] for e in state["settings"].values()]
-        state["status"] = "failed" if failed else ("complete" if all(s == "complete" for s in states) else "partial")
+        state["status"] = "failed" if failed else (
+            "inference_complete" if all(s == "inference_complete" for s in states) else "partial")
     except BaseException as exc:
         state.update(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed", error=str(exc))
         raise

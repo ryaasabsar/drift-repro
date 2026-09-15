@@ -6,17 +6,20 @@
   "prompt_format": "raw",
   "chat_template_kwargs": {},
   "seed": 42,
-  "batch_size": 16,
+  "batch_size": 1,
   "generation": {
     "temperature": 0.0,
     "top_p": 1.0,
     "top_k": -1,
     "max_tokens": 512,
-    "repetition_penalty": 1.0
+    "repetition_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "min_p": 0.0
   },
   "engine": {
     "max_model_len": 32768,
-    "max_num_seqs": 32,
+    "max_num_seqs": 1,
     "max_num_batched_tokens": 32768,
     "block_size": 64,
     "additional_config": {
@@ -41,20 +44,18 @@
     "startup_timeout_seconds": 3600,
     "env": {
       "VLLM_CONFIGURE_LOGGING": "1",
-      "VLLM_RPC_TIMEOUT": "900000",
-      "VLLM_TARGET_DEVICE": "tt",
       "TORCHDYNAMO_DISABLE": "1",
       "MESH_DEVICE": "P150",
-      "ARCH_NAME": "blackhole"
+      "ARCH_NAME": "blackhole",
+      "PYTHONHASHSEED": "42"
     }
   },
   "validation": {
     "status": "experimental_unverified",
+    "reference_vllm_version": "0.25.1",
     "references": [
-      "https://github.com/tenstorrent/tt-inference-server/blob/main/docs/model_support/models_by_hardware.md",
-      "https://github.com/tenstorrent/tt-inference-server/blob/main/tt-sglang-plugin/README.md"
+      "https://github.com/tenstorrent/vllm-tt-plugin/tree/compat/vllm-0.25.1"
     ],
-    "upstream_model_status": "NOT_VERIFIED_ON_P150",
-    "note": "Experimental TT vLLM template. The upstream P150 support table does not list this checkpoint; its Qwen3.5 hybrid attention requires dedicated TT kernels. A configuration alone does not implement model support. Internal precision and context must be validated on P150b. Base checkpoint: raw published prompts, without a chat template or thinking prefix."
+    "note": "Uses the pinned TT plugin and TTNN runtime. Model kernel execution, internal precision and full context on P150b have not been validated here. No substitute checkpoint is used."
   }
 }

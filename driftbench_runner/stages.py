@@ -182,7 +182,7 @@ def run_stage(directory, stage, judge_model=None, judge_revision=None, judge_dev
         # Validate every setting before starting expensive work.
         stage_status(root)
         if stage == 'safety':
-            from .preset import load_credentials
+            from .credentials import load_credentials
             from .safety import judge_safety
             lock = read_json(ROOT / 'models.lock.json')
             pinned = lock['safety_llamaguard3_8b']

@@ -44,28 +44,18 @@ def main():
     unpack.add_argument("--output", required=True, help="New destination directory, never an existing run")
     for name in ("run", "preflight"):
         cmd = sub.add_parser(name)
-        cmd.add_argument("--config", default=str(ROOT / "configs/rtx3060-qwen35-vllm.json"))
+        cmd.add_argument("--config", required=True)
         cmd.add_argument("--workloads", nargs="+", choices=list(WORKLOADS), default=list(WORKLOADS))
         cmd.add_argument("--limit", type=int, help="First N per workload; omitted means complete published files")
         if name == "run":
             cmd.add_argument("--output", required=True)
             cmd.add_argument("--resume", action="store_true")
-    evaluate = sub.add_parser("evaluate")
-    evaluate.add_argument("run_dir")
-    evaluate.add_argument("--code", action="store_true", help="Execute HumanEval completions with the isolated worker")
-    evaluate.add_argument("--safety-labels", help="JSONL labels produced by judge-safety or imported annotations")
     compare = sub.add_parser("compare")
     compare.add_argument("baseline")
     compare.add_argument("candidate")
     compare.add_argument("--output", required=True)
     compare.add_argument("--semantic", action="store_true", help="Compute chat embedding cosine drift on CPU")
     compare.add_argument("--allow-confounded", action="store_true", help="Label and allow multiple changed setup factors")
-    judge = sub.add_parser("judge-safety")
-    judge.add_argument("run_dir")
-    judge.add_argument("--model", default="Qwen/Qwen3Guard-Gen-0.6B")
-    judge.add_argument("--revision", help="Defaults to the pinned Qwen3Guard revision; main for other judges")
-    judge.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
-    judge.add_argument("--output", required=True)
     export = sub.add_parser("export", help="Save one setting's per-prompt CSV/JSONL tables")
     export.add_argument("run_dir")
     export.add_argument("--output")
@@ -73,14 +63,7 @@ def main():
     collect.add_argument("run_dirs", nargs="+")
     collect.add_argument("--output", required=True)
     collect.add_argument("--aliases", help="JSON object mapping supplied run paths to unique setting IDs")
-    score = sub.add_parser("score", help="Run the safety judge, evaluate all selected workloads, and export tables")
-    score.add_argument("run_dir")
-    score.add_argument("--judge-model", default="Qwen/Qwen3Guard-Gen-0.6B")
-    score.add_argument("--judge-revision")
-    score.add_argument("--judge-device", default="cpu", choices=["cpu", "cuda", "auto"])
-    score.add_argument("--labels-output")
-    score.add_argument("--skip-code", action="store_true")
-    suite = sub.add_parser("suite", help="Run model/framework settings sequentially on one accelerator host")
+    suite = sub.add_parser("suite", help="Inference-only suite with an explicit output path (prefer infer for portable runs)")
     suite.add_argument("--config", required=True)
     suite.add_argument("--output", required=True)
     suite.add_argument("--settings", nargs="+", help="Only run these setting IDs from the suite")
@@ -107,7 +90,7 @@ def main():
     if not getattr(args, "dry_run", False):
         if args.command in ("run", "suite", "compare", "collect"):
             directory = Path(args.output)
-        elif args.command in ("evaluate", "judge-safety", "score", "export") or (args.command == "stage" and args.stage != "status"):
+        elif args.command in ("export",) or (args.command == "stage" and args.stage != "status"):
             directory = Path(args.run_dir)
         elif args.command == "serve":
             from .common import read_json
@@ -140,7 +123,7 @@ def main():
 def dispatch(args):
     if args.command == 'infer':
         import re
-        from .preset import load_credentials
+        from .credentials import load_credentials
         from .suite import load_plan, run_suite
         from .stages import refresh_status
         if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]*', args.run_id):
@@ -193,17 +176,9 @@ def dispatch(args):
                      getattr(args, "resume", False), args.command == "preflight")
         if args.command == "preflight":
             print(json.dumps(result, indent=2))
-    elif args.command == "evaluate":
-        from .evaluation import evaluate_run
-        from .tables import export_run
-        evaluate_run(args.run_dir, args.code, args.safety_labels)
-        export_run(args.run_dir)
     elif args.command == "compare":
         from .comparison import compare_runs
         compare_runs(args.baseline, args.candidate, args.output, args.semantic, args.allow_confounded)
-    elif args.command == "judge-safety":
-        from .safety import judge_safety
-        judge_safety(args.run_dir, args.output, args.model, args.revision, args.device)
     elif args.command == "export":
         from .tables import export_run
         rows = export_run(args.run_dir, args.output)
@@ -212,15 +187,10 @@ def dispatch(args):
         from .common import read_json
         from .tables import collect_runs
         collect_runs(args.run_dirs, args.output, read_json(args.aliases) if args.aliases else None)
-    elif args.command == "score":
-        from .scoring import score_run, evaluation_complete
-        score_run(args.run_dir, args.judge_model, args.judge_revision, args.judge_device, args.labels_output, not args.skip_code)
-        if not args.skip_code and not evaluation_complete(args.run_dir):
-            raise RuntimeError("Some evaluations remain pending; inspect evaluation.json")
     elif args.command == "suite":
         from .suite import run_suite
         result = run_suite(args.config, args.output, args.settings, args.limit, args.workloads, args.device,
-                           args.resume, args.dry_run, args.inference_only, args.continue_on_error)
+                           args.resume, args.dry_run, True, args.continue_on_error)
         if args.dry_run:
             print(json.dumps(result, indent=2))
         else:

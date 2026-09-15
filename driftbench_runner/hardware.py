@@ -8,8 +8,8 @@ import subprocess
 from pathlib import Path
 
 
-SUPPORTED = {"nvidia": ("vllm", "sglang", "tensorrt-llm"),
-             "amd": ("vllm", "sglang"), "tenstorrent": ("vllm", "sglang")}
+SUPPORTED = {"nvidia": ("vllm", "sglang"),
+             "amd": ("vllm", "sglang"), "tenstorrent": ("vllm",)}
 
 
 def command_output(command):
@@ -26,9 +26,9 @@ def command_output(command):
 def discover():
     packages = {}
     package_sources = {}
-    for name in ("torch", "vllm", "sglang", "tensorrt-llm", "transformers", "tokenizers",
+    for name in ("torch", "vllm", "sglang", "transformers", "tokenizers",
                  "triton", "pytorch-triton-rocm", "ttnn", "tt-metal", "tt-smi",
-                 "tt-vllm-plugin", "tt-sglang-plugin", "sglang-tt-plugin"):
+                 "vllm-tt-plugin"):
         try:
             packages[name] = importlib.metadata.version(name)
             raw_source = importlib.metadata.distribution(name).read_text("direct_url.json")
@@ -57,9 +57,11 @@ def discover():
     result["tenstorrent_device_nodes"] = sorted(str(p) for p in Path("/dev/tenstorrent").glob("*"))
     result["runtime_environment"] = {k: os.environ[k] for k in (
         "CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "HSA_OVERRIDE_GFX_VERSION",
-        "VLLM_TARGET_DEVICE", "VLLM_USE_V1", "VLLM_ROCM_USE_AITER", "MESH_DEVICE", "ARCH_NAME",
+        "VLLM_TARGET_DEVICE", "VLLM_USE_V1", "VLLM_ROCM_USE_AITER", "MESH_DEVICE", "ARCH_NAME", "TT_VISIBLE_DEVICES",
         "TT_METAL_HOME", "TT_METAL_RUNTIME_ROOT", "CUDA_HOME", "ROCM_HOME", "TORCHDYNAMO_DISABLE",
-        "CXX", "CC", "NVCC_CCBIN", "CPATH", "LD_LIBRARY_PATH") if k in os.environ}
+        "CXX", "CC", "NVCC_CCBIN", "CPATH", "LD_LIBRARY_PATH", "PYTHONHASHSEED",
+        "CUBLAS_WORKSPACE_CONFIG", "SGLANG_ENABLE_DETERMINISTIC_INFERENCE",
+        "VLLM_BATCH_INVARIANT") if k in os.environ}
     if os.environ.get("CUDA_HOME"):
         result["cuda_compiler"] = command_output([str(Path(os.environ["CUDA_HOME"]) / "bin/nvcc"), "--version"])
     result["source_revisions"] = {}
@@ -94,11 +96,9 @@ def require_hardware(vendor, metadata):
 
 
 def validate_target(config):
-    if config.get("transport", "offline") not in ("offline", "http"):
-        raise ValueError("transport must be offline or http")
+    if config.get("transport") != "http":
+        raise ValueError("Production inference requires transport=http; offline experiments are archived")
     vendor = config.get("hardware", {}).get("vendor", "nvidia")
     backend = config["backend"]
     if vendor not in SUPPORTED or backend not in SUPPORTED[vendor]:
         raise ValueError(f"Unsupported vendor/framework combination: {vendor}/{backend}")
-    if config.get("transport", "offline") == "offline" and (backend != "vllm" or vendor == "tenstorrent"):
-        raise ValueError("Use transport=http for SGLang, TensorRT-LLM and Tenstorrent serving")

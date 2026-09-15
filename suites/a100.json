@@ -1,5 +1,5 @@
 {
-  "suite_id": "a100-models-vllm-sglang",
+  "suite_id": "a100",
   "workloads": [
     "code",
     "math",

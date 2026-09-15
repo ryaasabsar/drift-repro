@@ -1,11 +1,8 @@
 """Evaluate a saved setting and export its row table on the common host."""
-from pathlib import Path
-
 from .comparison import verified_evaluations
-from .evaluation import EVALUATOR_VERSION, evaluate_run, load_run
-from .tables import export_run
+from .evaluation import EVALUATOR_VERSION, load_run
 
-DEFAULT_JUDGE = "Qwen/Qwen3Guard-Gen-0.6B"
+DEFAULT_JUDGE = "meta-llama/Llama-Guard-3-8B"
 
 
 def evaluation_complete(run_dir, controls=None):
@@ -22,18 +19,3 @@ def evaluation_complete(run_dir, controls=None):
                         judge.get("environment", {}).get("device_mode") != controls["judge_device"]):
                     return False
     return complete
-
-
-def score_run(run_dir, judge_model=DEFAULT_JUDGE, judge_revision=None, judge_device="cpu", labels_output=None, code=True):
-    directory = Path(run_dir)
-    manifest, outputs = load_run(directory)
-    if manifest["status"] != "complete" or len(outputs) != manifest["expected_records"]:
-        raise ValueError("Finish this setting's inference before scoring")
-    labels = None
-    if "safety" in manifest["sources"]:
-        from .safety import judge_safety
-        labels = Path(labels_output) if labels_output else directory / "safety-labels.jsonl"
-        judge_safety(directory, labels, judge_model, judge_revision, judge_device)
-    summary = evaluate_run(directory, code, labels)
-    export_run(directory)
-    return summary

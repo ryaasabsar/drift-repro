@@ -41,7 +41,7 @@ def check_runtime(runtime, check_gpu):
 
 
 def check_serving_import(package):
-    module = "sglang.launch_server" if package == "sglang" else "tensorrt_llm.commands.serve"
+    module = "sglang.launch_server"
     faulthandler.dump_traceback_later(60, repeat=True)
     try:
         sys.argv = [module, "--help"]
@@ -62,7 +62,7 @@ def check_installation(args):
     subprocess.run([os.environ["CXX"], "--version"], check=True)
     check_headers()
     # Start fresh processes after configuring LD_LIBRARY_PATH: native serving
-    # libraries (including TensorRT's libpython dependency) need it at exec time.
+    # libraries need it at exec time.
     command = [sys.executable, "-u", "-m", "driftbench_runner.framework_check",
                args.package, args.version, args.cuda, args.runtime]
     gpu_args = ["--check-gpu"] if args.check_gpu else []
@@ -77,7 +77,7 @@ def check_installation(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("package", choices=("sglang", "tensorrt-llm"))
+    parser.add_argument("package", choices=("sglang",))
     parser.add_argument("version")
     parser.add_argument("cuda")
     parser.add_argument("runtime")

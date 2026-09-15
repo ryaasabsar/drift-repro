@@ -60,28 +60,8 @@ def launch_command(config, model_path=None):
         mapping.update({k: "--" + k.replace("_", "-") for k in (
             "dtype", "mem_fraction_static", "max_running_requests", "chunked_prefill_size", "attention_backend",
             "disable_radix_cache", "disable_cuda_graph", "disable_piecewise_cuda_graph", "disable_overlap_schedule", "max_mamba_cache_size",
-            "page_size", "tt_visible_devices", "mesh_shape", "disable_custom_all_reduce")})
-    else:
-        legacy = config.get("validation", {}).get("reference_tensorrt_llm_version") == "0.20.0"
-        if legacy:
-            # 0.20 has no --revision flag. serve() resolves this immutable local
-            # snapshot before launching; dry runs show that same pinned path.
-            model = model_path or str(model_snapshot_alias(config))
-        command = list(prefix or [str(Path(sys.executable).parent / "trtllm-serve")]) + [model]
-        if not legacy:
-            command += ["--revision", config["revision"]]
-        mapping = {"max_model_len": "--max_seq_len", "tensor_parallel_size": "--tp_size"}
-        mapping.update({k: "--" + k for k in ("backend", "max_batch_size", "max_num_tokens",
-                                              "kv_cache_free_gpu_memory_fraction", "enable_chunked_prefill",
-                                              "fail_fast_on_attention_window_too_large")})
-        # dtype and advanced settings are supplied through an explicit API YAML.
-        mapping["dtype"] = None
-        mapping["llm_api_options"] = None
-        if legacy:
-            mapping["enable_chunked_prefill"] = None  # Supplied through the API options.
-            mapping.pop("fail_fast_on_attention_window_too_large")
-        options_path = str(Path(config["server"]["metadata_path"]).with_suffix(".trt-options.json"))
-        command += ["--extra_llm_api_options", options_path]
+            "page_size", "tt_visible_devices", "mesh_shape", "disable_custom_all_reduce",
+            "enable_deterministic_inference", "sampling_defaults")})
     import json
     for key, value in config["engine"].items():
         if key not in mapping:
@@ -123,33 +103,6 @@ def verified_metadata(config):
     return metadata
 
 
-def tensorrt_options(config):
-    options = dict(config["engine"].get("llm_api_options", {}))
-    if set(options) & {"model", "revision", "tokenizer", "dtype", "max_seq_len", "max_num_tokens", "max_batch_size", "backend", "tensor_parallel_size", "build_config", "enable_chunked_prefill"}:
-        raise ValueError("llm_api_options cannot override controlled model or engine settings")
-    options["dtype"] = config["engine"].get("dtype", "auto")
-    kv = dict(options.get("kv_cache_config", {}))
-    # 0.20 replaces the entire KvCacheConfig object when loading extra options.
-    # Carry the explicit CLI memory budget into that replacement too.
-    if "free_gpu_memory_fraction" in kv:
-        raise ValueError("Set KV memory fraction through kv_cache_free_gpu_memory_fraction")
-    if "kv_cache_free_gpu_memory_fraction" in config["engine"]:
-        kv["free_gpu_memory_fraction"] = config["engine"]["kv_cache_free_gpu_memory_fraction"]
-    options["kv_cache_config"] = kv
-    if config.get("validation", {}).get("reference_tensorrt_llm_version") == "0.20.0":
-        options["enable_chunked_prefill"] = config["engine"].get("enable_chunked_prefill", False)
-    return options
-
-
-def tensorrt_context_limit(config, log):
-    # Both validated wheel versions emit this after KV-cache allocation. Cap
-    # at the requested limit: overlap scheduling may reserve an extra token.
-    limits = re.findall(r"max_seq_len=(\d+), max_num_requests=", log)
-    if not limits:
-        raise RuntimeError("TensorRT did not report an effective context limit; inspect its worker log")
-    return min([config["engine"]["max_model_len"], *map(int, limits)])
-
-
 def configure_serving_environment(config):
     os.environ["PATH"] = str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", "")
     launch = config.get("launch", {})
@@ -171,21 +124,8 @@ def configure_serving_environment(config):
         gcc = compiler_dir / "bin/x86_64-conda-linux-gnu-gcc"
         gxx = compiler_dir / "bin/x86_64-conda-linux-gnu-g++"
         if not gcc.exists() or not gxx.exists():
-            raise RuntimeError("Install the workspace GCC 13 toolchain first; see docs/platforms.md")
+            raise RuntimeError("Install the workspace GCC 13 toolchain first; run scripts/install_workspace_gcc.py")
         os.environ.update(CC=str(gcc), CXX=str(gxx), NVCC_CCBIN=str(gxx))
-    if config["backend"] == "tensorrt-llm":
-        import sysconfig
-        site = Path(sysconfig.get_paths()["purelib"])
-        paths = [str(p) for p in (site / "nvidia").glob("*/lib")]
-        paths += [str(site / "tensorrt_libs"), str(site / "tensorrt_cu12_libs"), str(site / "tensorrt_cu13_libs"),
-                  str(Path(sys.prefix) / "lib"), str(Path(sys.base_prefix) / "lib")]
-        if os.environ.get("LD_LIBRARY_PATH"):
-            paths.append(os.environ["LD_LIBRARY_PATH"])
-        os.environ["LD_LIBRARY_PATH"] = os.pathsep.join(paths)
-        # CUDA 13 pip wheels place cuBLAS headers outside CUDA_HOME.
-        include = site / "nvidia/cu13/include"
-        if include.is_dir():
-            os.environ["CPATH"] = str(include) + os.pathsep + os.environ.get("CPATH", "")
     if launch.get("workspace_gcc"):
         os.environ["LD_LIBRARY_PATH"] = str(ROOT / ".tools/gcc13/lib") + os.pathsep + os.environ.get("LD_LIBRARY_PATH", "")
 
@@ -203,11 +143,8 @@ def serve(config_path, dry_run=False):
         require_hardware(config["hardware"]["vendor"], environment)
         if config["backend"] not in environment["packages"]:
             raise RuntimeError(f"Install {config['backend']} in this Python environment before serving")
-        expected = config.get("validation", {}).get("reference_tensorrt_llm_version")
-        if config["backend"] == "tensorrt-llm" and expected and environment["packages"]["tensorrt-llm"] != expected:
-            raise RuntimeError(f"This profile requires TensorRT-LLM {expected}; installed version differs. Run the matching installer/profile.")
     pinned_snapshot = None
-    if config["hardware"]["vendor"] == "tenstorrent" or config["backend"] == "tensorrt-llm":
+    if config["hardware"]["vendor"] == "tenstorrent":
         from huggingface_hub import snapshot_download
         with activity("Resolving pinned model snapshot", stage="model_load", setting=config.get("setup_id"), model=config["model"]):
             pinned_snapshot = snapshot_download(config["model"], revision=config["revision"])
@@ -228,10 +165,6 @@ def serve(config_path, dry_run=False):
     with socket.socket(socket.AF_INET6 if address.hostname == "::1" else socket.AF_INET) as check:
         if check.connect_ex((address.hostname, address.port or 80)) == 0:
             raise RuntimeError("Port is already in use; refusing to attach provenance to someone else's server")
-    if config["backend"] == "tensorrt-llm":
-        options = tensorrt_options(config)
-        # JSON is a YAML subset; keep all effective options in the experiment config.
-        write_json(Path(config["server"]["metadata_path"]).with_suffix(".trt-options.json"), options)
     launch = config.get("launch", {})
     child_env = dict(os.environ)
     identity = serving_identity(config)
@@ -250,7 +183,6 @@ def serve(config_path, dry_run=False):
     signal.signal(signal.SIGTERM, stopped)
     process = None
     try:
-        log_offset = log_path.stat().st_size if log_path.exists() else 0
         with log_path.open("a") as log:
             process = subprocess.Popen(command, env=child_env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             metadata.update(pid=process.pid, launcher_pid=os.getpid())
@@ -272,16 +204,7 @@ def serve(config_path, dry_run=False):
             backend.timeout = config["server"].get("timeout_seconds", 900)
             with activity("Validating generation endpoint", stage="startup", setting=config.get("setup_id")):
                 validation = backend.generate_one({"input_ids": [1]}, max_tokens=2)
-            if config["backend"] == "tensorrt-llm":
-                # TRT 1.2.1 may align/reduce its cache window even with fail-fast.
-                # Capture the worker's reported limit, not only the requested one.
-                with log_path.open("rb") as current_log:
-                    current_log.seek(log_offset)
-                    current_text = current_log.read().decode(errors="replace")
-                limit = tensorrt_context_limit(config, current_text)
-                metadata["effective_context_limit"] = limit
-            else:
-                metadata["effective_context_limit"] = config["engine"]["max_model_len"]
+            metadata["effective_context_limit"] = config["engine"]["max_model_len"]
             metadata.update(status="ready", ready_at=now(), probe=probe, pid=process.pid,
                             api_validation={"input_tokens": 1, "output_tokens": validation["output_tokens"],
                                             "token_ids_source": validation["token_ids_source"]})

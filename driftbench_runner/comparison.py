@@ -105,19 +105,22 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
     if semantic:
         with activity("Loading chat embedding evaluator", stage="model_load", device="cpu"):
             local_environment()
+            from .reproducibility import seed_evaluator
+            reproducibility = seed_evaluator()
             from sentence_transformers import SentenceTransformer
             pinned = read_json(ROOT / "models.lock.json")["chat_embedding"]
             model_id, revision = pinned["model"], pinned["revision"]
             model = SentenceTransformer(model_id, revision=revision, device="cpu")
+            model.eval()
         chat = [r for r in pairs if r["workload"] == "chat"]
         if chat:
             a_texts = [baseline[("chat", r["prompt_id"])]["output_text"] for r in chat]
             b_texts = [candidate[("chat", r["prompt_id"])]["output_text"] for r in chat]
             with activity("Embedding baseline chat responses", stage="comparison", workload="chat", total=len(chat), device="cpu") as progress:
-                emb_a = model.encode(a_texts, normalize_embeddings=True, show_progress_bar=False)
+                emb_a = model.encode(a_texts, batch_size=1, normalize_embeddings=True, show_progress_bar=False)
                 progress.update(len(chat))
             with activity("Embedding candidate chat responses", stage="comparison", workload="chat", total=len(chat), device="cpu") as progress:
-                emb_b = model.encode(b_texts, normalize_embeddings=True, show_progress_bar=False)
+                emb_b = model.encode(b_texts, batch_size=1, normalize_embeddings=True, show_progress_bar=False)
                 progress.update(len(chat))
             for row, va, vb, ta, tb in zip(chat, emb_a, emb_b, a_texts, b_texts):
                 similarity = min(1.0, max(-1.0, float(va @ vb)))
@@ -125,7 +128,8 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
                            substantial_semantic_drift=(1.0 - similarity) > 0.3,
                            embedding_input_truncated=any(len(model.tokenizer.encode(t, verbose=False)) > model.max_seq_length for t in (ta, tb)))
         semantic_meta = {"model": model_id, "revision": revision, "max_seq_length": model.max_seq_length,
-                         "threshold": "1 - cosine_similarity > 0.3", "device": "cpu"}
+                         "threshold": "1 - cosine_similarity > 0.3", "device": "cpu",
+                         "batch_size": 1, "reproducibility": reproducibility}
     summary = {}
     for workload in baseline_meta["sources"]:
         rows = [r for r in pairs if r["workload"] == workload]

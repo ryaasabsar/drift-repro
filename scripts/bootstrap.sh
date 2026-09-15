@@ -1,21 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+mode="${1:-nvidia}"
+case "$mode" in
+  nvidia|--client-only|--datasets-only) ;;
+  *) echo 'Usage: bash scripts/bootstrap.sh [nvidia|--client-only|--datasets-only]' >&2; exit 2 ;;
+esac
 mkdir -p .tools vendor
-source scripts/ensure_uv.sh
 source scripts/env.sh
-uv venv --python 3.12 .venv
-uv pip sync --python .venv/bin/python requirements.lock.txt
-uv pip install --python .venv/bin/python --no-deps -e .
+if [[ "$mode" != --datasets-only ]]; then
+  source scripts/ensure_uv.sh
+  if [[ "$mode" == --client-only ]]; then
+    # No torch/CUDA/ROCm wheels: a tokenizer client can drive any serving host.
+    uv venv --managed-python --python 3.12 .venv-client
+    uv pip install --python .venv-client/bin/python \
+      'transformers==4.57.6' 'huggingface-hub==0.36.2' 'sentencepiece==0.2.2'
+    uv pip install --python .venv-client/bin/python --no-deps -e .
+  else
+    uv venv --managed-python --python 3.12 .venv
+    uv pip sync --python .venv/bin/python requirements.lock.txt
+    uv pip install --python .venv/bin/python --no-deps -e .
+  fi
+fi
 if [[ ! -d vendor/driftbench-ae ]]; then
   git clone https://github.com/GianluigiVitale/driftbench-ae.git vendor/driftbench-ae
 fi
 git -C vendor/driftbench-ae checkout c915e781a17c2d4c9bd768e60a1bc9734c5f2895
-if ! command -v bwrap >/dev/null && [[ ! -x .tools/bubblewrap-root/usr/bin/bwrap ]]; then
-  if command -v apt-get >/dev/null; then
-    (cd .tools && apt-get download bubblewrap && dpkg-deb -x bubblewrap_*.deb bubblewrap-root)
-  else
-    echo 'Install bubblewrap with your Linux package manager to enable isolated HumanEval evaluation.'
-  fi
-fi
-echo 'Ready. Run: source scripts/env.sh'
+echo 'Ready. Bubblewrap is needed only on the RTX code-evaluation host.'

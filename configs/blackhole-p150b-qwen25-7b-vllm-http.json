@@ -6,17 +6,20 @@
   "prompt_format": "chat",
   "chat_template_kwargs": {},
   "seed": 42,
-  "batch_size": 16,
+  "batch_size": 1,
   "generation": {
     "temperature": 0.0,
     "top_p": 1.0,
     "top_k": -1,
     "max_tokens": 512,
-    "repetition_penalty": 1.0
+    "repetition_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "min_p": 0.0
   },
   "engine": {
     "max_model_len": 32768,
-    "max_num_seqs": 32,
+    "max_num_seqs": 1,
     "max_num_batched_tokens": 32768,
     "block_size": 64,
     "additional_config": {
@@ -41,20 +44,18 @@
     "startup_timeout_seconds": 3600,
     "env": {
       "VLLM_CONFIGURE_LOGGING": "1",
-      "VLLM_RPC_TIMEOUT": "900000",
-      "VLLM_TARGET_DEVICE": "tt",
       "TORCHDYNAMO_DISABLE": "1",
       "MESH_DEVICE": "P150",
-      "ARCH_NAME": "blackhole"
+      "ARCH_NAME": "blackhole",
+      "PYTHONHASHSEED": "42"
     }
   },
   "validation": {
     "status": "experimental_unverified",
-    "upstream_model_status": "NOT_VERIFIED_ON_P150",
-    "note": "Qwen2.5-7B-Instruct is documented on Wormhole N300; P150b support is not established. This is an experimental TT vLLM configuration, not a validated release preset. The TT build must implement this model on P150 and support the requested context. Internal precision must be recorded on the serving host. Llama-Guard-3-8B evaluation uses host CPU float32; provision sufficient host RAM or defer evaluation.",
+    "reference_vllm_version": "0.25.1",
     "references": [
-      "https://github.com/tenstorrent/tt-metal/blob/main/models/tt_transformers/README.md",
-      "https://github.com/tenstorrent/tt-inference-server/blob/main/docs/model_support/models_by_hardware.md"
-    ]
+      "https://github.com/tenstorrent/vllm-tt-plugin/tree/compat/vllm-0.25.1"
+    ],
+    "note": "Uses the pinned TT plugin and TTNN runtime. Model kernel execution, internal precision and full context on P150b have not been validated here. No substitute checkpoint is used."
   }
 }

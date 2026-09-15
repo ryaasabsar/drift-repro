@@ -59,15 +59,14 @@ class HTTPBackend:
         generation = dict(self.config["generation"])
         budget = generation.pop("max_tokens") if max_tokens is None else max_tokens
         generation.pop("max_tokens", None)
-        supported = {"temperature", "top_p", "top_k", "repetition_penalty"}
+        supported = {"temperature", "top_p", "top_k", "repetition_penalty",
+                     "presence_penalty", "frequency_penalty", "min_p"}
         if set(generation) - supported:
             raise ValueError(f"Unmapped generation controls: {set(generation) - supported}")
         if self.backend == "sglang":
             params = {**generation, "max_new_tokens": budget, "sampling_seed": self.config["seed"]}
             return "/generate", {"input_ids": row["input_ids"], "sampling_params": params,
                                   "return_logprob": True, "logprob_start_len": -1, "stream": False}
-        if self.backend == "tensorrt-llm" and generation.get("top_k") == -1:
-            generation["top_k"] = 0  # TensorRT-LLM's disabled-top-k convention.
         payload = {"model": self.server.get("model_name", self.config["model"]),
                    "prompt": row["input_ids"], "max_tokens": budget, "seed": self.config["seed"],
                    "n": 1, "stream": False, "add_special_tokens": False, **generation}
@@ -121,6 +120,8 @@ class HTTPBackend:
         return result
 
     def generate(self, batch):
+        if len(batch) == 1:
+            return [self.generate_one(batch[0])]
         # A barrier separates client batches; this is not a claim about GPU batching.
         with ThreadPoolExecutor(max_workers=len(batch)) as pool:
             return list(pool.map(self.generate_one, batch))

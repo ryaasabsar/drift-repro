@@ -23,7 +23,6 @@ class Framework(NamedTuple):
 
 FRAMEWORKS = {
     "sglang": Framework(".venv-sglang", "12.8.1", "sglang", "0.5.10.post1", "12.8"),
-    "tensorrt": Framework(".venv-trt", "12.8.1", "tensorrt-llm", "0.20.0", "12.8"),
 }
 
 
@@ -103,17 +102,9 @@ def main():
                     run([uv, "venv", "--managed-python", "--python", "3.12", "--clear", target], env, args.dry_run)
                 else:
                     run([python, "-c", "import sys; assert sys.version_info[:2] == (3, 12), 'Expected Python 3.12'"], env, args.dry_run)
-                # TensorRT 0.20 requires a source build of its removed xgrammar
-                # wheel. Prepare the workspace compiler before syncing packages.
                 run([python, ROOT / "scripts/install_workspace_gcc.py"], env, args.dry_run)
-                if args.framework == "tensorrt":
-                    env.update(CC=str(ROOT / ".tools/gcc13/bin/x86_64-conda-linux-gnu-gcc"),
-                               CXX=str(ROOT / ".tools/gcc13/bin/x86_64-conda-linux-gnu-g++"),
-                               CMAKE_BUILD_PARALLEL_LEVEL="2")
                 command = [uv, "pip", "sync", "--python", python,
                            ROOT / f"requirements.{args.framework}.lock.txt"]
-                if args.framework == "tensorrt":
-                    command += ["--index", "https://pypi.org/simple", "--default-index", "https://pypi.nvidia.com"]
                 run(command, env, args.dry_run)
                 run([uv, "pip", "install", "--python", python, "--no-deps", "-e", ROOT], env, args.dry_run)
                 if not (ROOT / f".tools/cuda-{cuda}/bin/nvcc").is_file():

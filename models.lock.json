@@ -1,26 +1,26 @@
 {
-  "inference": {
-    "model": "Qwen/Qwen3.5-0.8B",
-    "revision": "2fc06364715b967f1860aea9cf38778875588b17"
-  },
-  "safety": {
-    "model": "Qwen/Qwen3Guard-Gen-0.6B",
-    "revision": "fada3b2f655b89601929198343c94cd2f64d93cc"
+  "safety_llamaguard3_8b": {
+    "model": "meta-llama/Llama-Guard-3-8B",
+    "revision": "7327bd9f6efbbe6101dc6cc4736302b3cbb6e425"
   },
   "chat_embedding": {
     "model": "sentence-transformers/all-mpnet-base-v2",
     "revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130"
   },
-  "inference_tensorrt_6gb": {
-    "model": "Qwen/Qwen2.5-0.5B-Instruct",
-    "revision": "7ae557604adf67be50417f59c2c2f167def9a775"
+  "safety": {
+    "model": "meta-llama/Llama-Guard-3-8B",
+    "revision": "7327bd9f6efbbe6101dc6cc4736302b3cbb6e425"
   },
-  "inference_a100_qwen25_7b": {
+  "qwen35_9b_base": {
+    "model": "Qwen/Qwen3.5-9B-Base",
+    "revision": "68c46c4b3498877f3ef123c856ecfde50c39f404"
+  },
+  "qwen25_7b_instruct": {
     "model": "Qwen/Qwen2.5-7B-Instruct",
     "revision": "a09a35458c702b33eeacc393d103063234e8bc28"
   },
-  "safety_llamaguard3_8b": {
-    "model": "meta-llama/Llama-Guard-3-8B",
-    "revision": "7327bd9f6efbbe6101dc6cc4736302b3cbb6e425"
+  "llama31_8b_instruct": {
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "revision": "0e9e39f249a16976918f6564b8830bc894c89659"
   }
 }

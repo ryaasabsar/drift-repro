@@ -23,6 +23,10 @@ validate physical devices.
 Existing `.venv`, `.venv-sglang`, `.venv-trt` and ROCm environments are unaffected.
 The suite already selects `.venv-tt-vllm/bin/python` for TT vLLM. Source the generated
 activation file before running it so the TT-Metal paths and client Python are set.
+`TT_METAL_HOME` points to the source checkout for model code, while
+`TT_METAL_RUNTIME_ROOT` is unset so TTNN uses the built runtime bundled in its
+wheel. An unbuilt source checkout lacks the generated linker scripts and runtime
+objects needed for firmware linking.
 
 If `.venv-tt-vllm` was previously created with Python 3.10, replace that environment
 explicitly (this removes custom packages in that environment):
@@ -54,6 +58,11 @@ Python packages and the system compiler are left intact. The repair requires the
 existing TTNN 0.77.0 environment and matching TT-Metal checkout. It compiles a
 small Blackhole object using the four flags above without opening a device.
 `--check --toolchain-only` verifies this setup without downloading or linking.
+The repair also refreshes `activate-tt.sh` to remove the old source runtime
+override. If linking fails with missing `runtime/hw/toolchain/blackhole/*.ld`
+files under `.tools/tt-metal-*`, run the repair and source the activation file
+again. The check verifies the wheel's Blackhole linker scripts and startup
+objects before attempting the compiler probe.
 
 The installer requires Linux x86_64 with glibc >=2.34, bash, git, curl, flock,
 tar with xz support, and sha256sum.

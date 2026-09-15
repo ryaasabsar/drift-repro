@@ -41,6 +41,8 @@ def judge_environment(torch, device):
 def judge_safety(run_dir, output_path, model_id, revision, device):
     with activity("Preparing safety evaluator", stage="safety", model=model_id, device=device):
         local_environment()
+        from .reproducibility import seed_evaluator
+        reproducibility = seed_evaluator()
         import torch
         from huggingface_hub import HfApi
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -61,7 +63,9 @@ def judge_safety(run_dir, output_path, model_id, revision, device):
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             revision = HfApi().model_info(model_id, revision=revision).sha
         judge = {"model": model_id, "revision": revision, "dtype": "float32" if device == "cpu" else "bfloat16",
-                 "decoding": {"do_sample": False, "max_new_tokens": 128}, "template": "official_user_and_assistant",
+                 "decoding": {"do_sample": False, "num_beams": 1, "max_new_tokens": 128},
+                 "reproducibility": reproducibility, "attention_implementation": "eager",
+                 "template": "official_user_and_assistant",
                  "family": family, "binary_policy": "safe_vs_unsafe_or_controversial" if family == "qwen3guard" else "native_binary",
                  "environment": judge_environment(torch, device)}
         existing = keyed(read_jsonl(output_path))
@@ -77,7 +81,8 @@ def judge_safety(run_dir, output_path, model_id, revision, device):
     with activity("Loading safety judge", stage="model_load", setting=setting, model=model_id, device=device):
         tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
         model = AutoModelForCausalLM.from_pretrained(model_id, revision=revision, device_map=device,
-                                                   dtype=torch.float32 if device == "cpu" else torch.bfloat16)
+                                                   dtype=torch.float32 if device == "cpu" else torch.bfloat16,
+                                                   attn_implementation="eager")
         model.eval()
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with Progress("Classifying safety responses", stage="safety", setting=setting, workload="safety",
@@ -91,7 +96,7 @@ def judge_safety(run_dir, output_path, model_id, revision, device):
             ], tokenize=False)
             inputs = tokenizer(rendered, add_special_tokens=False, return_tensors="pt").to(model.device)
             with torch.inference_mode():
-                outputs = model.generate(**inputs, do_sample=False, max_new_tokens=128,
+                outputs = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=128,
                                          pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id)
             raw = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True).strip()
             label, severity = parse_judgment(raw, family)
