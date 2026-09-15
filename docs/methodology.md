@@ -51,3 +51,26 @@ Temperature zero and a fixed seed do not guarantee bitwise-identical GPU results
 No PRI prediction or paper headline flip rate is extrapolated to these new runs. A later hardware comparison requires actual results from both machines.
 
 Local validation of these controls used the cached Qwen3.5-0.8B checkpoint on RTX 3060, one GSM8K prompt, a 32-token cap and two independent server starts per framework. SGLang 0.5.10.post1 repeated the same token sequence with deterministic inference enabled; vLLM 0.17.1 produced different sequences despite identical input tokens and sampling controls. The CPU embedding evaluator repeated exactly on two short texts. These are small diagnostic checks, not evidence of determinism for the production 7–9B models or other accelerators. Their artifacts are in `.archive/check-output/rtx-smoke-20260914T173240Z/` and `.archive/check-output/determinism-embedding.json`.
+
+## Client and serving contracts
+
+The common client is now Python 3.12.14 with every dependency pinned in
+`requirements.client.lock.txt`. All inference wrappers use it for prompt
+rendering/tokenization, independent of the serving interpreter. Required client
+versions are checked before tokenization; manifests retain those versions, a
+runner source hash and the lockfile hash. Resume refuses a changed client.
+
+`runtime-contracts.json` specifies the expected upstream core releases per
+vendor/framework. CUDA 12.8 is required in the NVIDIA serving baseline; AMD uses
+corresponding ROCm builds. The TT plugin uses vLLM 0.25.1/Torch 2.11.0 rather than
+the NVIDIA/AMD vLLM baseline 0.17.1/Torch 2.10.0. SGLang has its own dependency
+baseline. These declared native-stack differences remain confounds; version
+checks do not prove identical kernels or numerical precision.
+
+Serving provenance records all installed package versions, Python, platform,
+NVIDIA driver versions and source revisions. Comparisons display the environment
+differences and treat missing historical client provenance as unknown. They do
+not certify older runs as identical merely because package details were absent.
+Use the same evaluator environment for every member of a comparison.
+
+Llama Instruct profiles explicitly pass `date_string="15 Sep 2026"` to the chat template. This fixes the study date wherever the template uses that argument, so runs on different calendar days use the same configured date. The argument and rendered prompt are saved in each run.

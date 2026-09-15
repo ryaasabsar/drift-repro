@@ -1,0 +1,59 @@
+{
+  "client": {
+    "python": "3.12.14",
+    "requirements": "requirements.client.lock.txt"
+  },
+  "serving": {
+    "nvidia/vllm": {
+      "packages": {
+        "vllm": "0.17.1",
+        "torch": "2.10.0",
+        "transformers": "4.57.6",
+        "tokenizers": "0.22.2"
+      },
+      "cuda_runtime": "12.8",
+      "note": "Pinned CUDA 12.8 environment; compatible driver required. Native dependencies differ from ROCm and TT."
+    },
+    "nvidia/sglang": {
+      "packages": {
+        "sglang": "0.5.10.post1",
+        "torch": "2.9.1",
+        "transformers": "5.3.0",
+        "tokenizers": "0.22.2"
+      },
+      "cuda_runtime": "12.8",
+      "note": "SGLang dependency baseline differs from vLLM; compare frameworks as a stack change."
+    },
+    "amd/vllm": {
+      "packages": {
+        "vllm": "0.17.1",
+        "torch": "2.10.0",
+        "transformers": "4.57.6",
+        "tokenizers": "0.22.2"
+      },
+      "note": "Match NVIDIA upstream releases with ROCm builds. MI210 model/kernel support requires host validation; CUDA lockfiles must not be installed here."
+    },
+    "amd/sglang": {
+      "packages": {
+        "sglang": "0.5.10.post1",
+        "torch": "2.9.1",
+        "transformers": "5.3.0",
+        "tokenizers": "0.22.2"
+      },
+      "note": "Match NVIDIA upstream releases with ROCm builds. MI210 support requires host validation; do not replace vendor native wheels with CUDA wheels."
+    },
+    "tenstorrent/vllm": {
+      "packages": {
+        "vllm": "0.25.1",
+        "torch": "2.11.0",
+        "ttnn": "0.77.0",
+        "transformers": "5.12.1",
+        "vllm-tt-plugin": "0.1.0",
+        "torchvision": "0.26.0",
+        "numpy": "1.26.4"
+      },
+      "note": "TT plugin compatibility baseline requires a different vLLM/PyTorch release. Cross-vendor comparisons include software/kernel/precision changes, not hardware alone.",
+      "cuda_runtime": null
+    }
+  }
+}

@@ -3,6 +3,7 @@
 From the project root:
 
 ```bash
+bash scripts/bootstrap.sh --client-only
 bash scripts/install_tt_vllm.sh
 source .venv-tt-vllm/activate-tt.sh
 ```
@@ -22,7 +23,7 @@ validate physical devices.
 
 Existing `.venv`, `.venv-sglang`, `.venv-trt` and ROCm environments are unaffected.
 The suite already selects `.venv-tt-vllm/bin/python` for TT vLLM. Source the generated
-activation file before running it so the TT-Metal paths and client Python are set.
+activation file before running it so the TT-Metal paths are set. The benchmark uses the separate pinned `.venv-client`, while `.venv-tt-vllm` runs the serving process. The `run_blackhole_p150b.sh` wrapper handles activation and older activation files automatically.
 `TT_METAL_HOME` points to the source checkout for model code, while
 `TT_METAL_RUNTIME_ROOT` is unset so TTNN uses the built runtime bundled in its
 wheel. An unbuilt source checkout lacks the generated linker scripts and runtime

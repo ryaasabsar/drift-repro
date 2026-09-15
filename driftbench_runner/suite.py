@@ -18,7 +18,7 @@ from .tables import collect_runs, export_run
 from .logging import EventFollower, activity, event, progress_interval
 
 
-def load_plan(config_path, output_dir, limit=None, workloads=None, device=None):
+def load_plan(config_path, output_dir, limit=None, workloads=None, device=None, selected=None, frameworks=None):
     path = Path(config_path).resolve()
     spec = read_json(path)
     unknown = set(spec) - {"suite_id", "settings", "workloads", "limit", "evaluation", "comparisons"}
@@ -85,6 +85,20 @@ def load_plan(config_path, output_dir, limit=None, workloads=None, device=None):
             raise ValueError("Unknown comparison fields")
         if pair["baseline"] not in seen or pair["candidate"] not in seen or pair["baseline"] == pair["candidate"]:
             raise ValueError("Comparison IDs must name two different settings in the suite")
+    if selected is not None:
+        unknown = set(selected) - seen
+        if unknown:
+            raise ValueError(f"Unknown settings: {sorted(unknown)}")
+        settings = [item for item in settings if item['id'] in selected]
+    if frameworks is not None:
+        unknown = set(frameworks) - {item['config']['backend'] for item in settings}
+        if unknown:
+            raise ValueError(f"Frameworks unavailable in the selected suite: {sorted(unknown)}")
+        settings = [item for item in settings if item['config']['backend'] in frameworks]
+    if not settings:
+        raise ValueError('No settings match the requested filters')
+    selected_ids = {item['id'] for item in settings}
+    comparisons = [pair for pair in comparisons if {pair['baseline'], pair['candidate']} <= selected_ids]
     return {"suite_id": spec["suite_id"], "workloads": selected_workloads, "limit": limit,
             "sources": sources, "expected_records_per_setting": sum(s["selected"] for s in sources.values()),
             "device": device, "evaluation": evaluation, "settings": settings, "comparisons": comparisons}
@@ -221,12 +235,10 @@ def run_inference(item, plan, resume, environment):
 
 
 def run_suite(config_path, output_dir, selected=None, limit=None, workloads=None, device=None,
-              resume=False, dry_run=False, inference_only=True, continue_on_error=False):
-    plan = load_plan(config_path, output_dir, limit, workloads, device)
+              resume=False, dry_run=False, inference_only=True, continue_on_error=False, frameworks=None):
+    plan = load_plan(config_path, output_dir, limit, workloads, device, selected, frameworks)
     ids = {item["id"] for item in plan["settings"]}
-    selected = set(selected or ids)
-    if not selected <= ids:
-        raise ValueError(f"Unknown settings: {sorted(selected - ids)}")
+    selected = ids
     if dry_run:
         return {**plan, "selected": sorted(selected), "server_python_available": {
             item["id"]: Path(item["server_python"]).is_file() for item in plan["settings"]}}

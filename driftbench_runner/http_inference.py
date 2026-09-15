@@ -1,6 +1,5 @@
 """Inference on a local or remote server, preserving the existing evaluation schema."""
 from pathlib import Path
-import platform
 import time
 
 from .common import UPSTREAM_COMMIT, append_jsonl, digest, keyed, now, read_json, read_jsonl, write_json
@@ -8,6 +7,7 @@ from .http_backend import HTTPBackend
 from .inference import planned_batches
 from .serving import verified_metadata
 from .logging import InferenceProgress, activity, event
+from .software import client_environment
 
 
 def run_http(config, rows, sources, outdir, resume=False):
@@ -25,6 +25,7 @@ def run_http(config, rows, sources, outdir, resume=False):
     fingerprint = digest(identity)
     path = outdir / "manifest.json"
     environment = dict(metadata["environment"])
+    client = client_environment()
     environment["gpu_name"] = ", ".join(x["name"] for x in environment.get("accelerators", [])) or config["hardware"]["device"]
     if path.exists():
         manifest = read_json(path)
@@ -32,6 +33,8 @@ def run_http(config, rows, sources, outdir, resume=False):
             raise ValueError("Run exists; choose another directory or use --resume")
         if manifest["run_fingerprint"] != fingerprint or manifest["environment"] != environment:
             raise ValueError("Resume refused: requests, configuration, or serving environment changed")
+        if manifest.get('client_environment') != client:
+            raise ValueError('Resume refused: tokenizer client or runner source changed; use a new run ID')
     else:
         if any(outdir.glob("*.jsonl")):
             raise ValueError("Output records exist without a manifest")
@@ -39,7 +42,7 @@ def run_http(config, rows, sources, outdir, resume=False):
                     "config": config, "sources": sources, "run_fingerprint": fingerprint,
                     "expected_records": len(rows), "environment": environment,
                     "server_provenance": metadata, "scheduling": "client_concurrent_barrier",
-                    "client_environment": {"python": platform.python_version(), "platform": platform.platform()},
+                    "client_environment": client,
                     "status": "prepared"}
     existing = keyed([r for name in sources for r in read_jsonl(outdir / f"{name}.jsonl")])
     expected = keyed(rows)

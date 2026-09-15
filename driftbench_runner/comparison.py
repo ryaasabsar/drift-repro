@@ -32,6 +32,19 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
         if metadata["status"] != "complete" or len(outputs) != metadata["expected_records"]:
             raise ValueError("Finish inference before comparison")
     confounds = []
+    base_client = baseline_meta.get('client_environment')
+    cand_client = candidate_meta.get('client_environment')
+    if not base_client or not cand_client or 'packages' not in base_client or 'packages' not in cand_client:
+        confounds.append('client_provenance_missing')
+    elif any(base_client.get(k) != cand_client.get(k) for k in ('python', 'packages', 'runner_sha256', 'requirements_sha256')):
+        confounds.append('client_software')
+    numerical_keys = ('PYTHONHASHSEED', 'CUBLAS_WORKSPACE_CONFIG', 'VLLM_BATCH_INVARIANT',
+                      'SGLANG_ENABLE_DETERMINISTIC_INFERENCE', 'VLLM_USE_V1',
+                      'VLLM_ROCM_USE_AITER', 'HSA_OVERRIDE_GFX_VERSION', 'TORCHDYNAMO_DISABLE')
+    numerical_environments = [{k: meta['environment'].get('runtime_environment', {}).get(k)
+                               for k in numerical_keys} for meta in (baseline_meta, candidate_meta)]
+    if numerical_environments[0] != numerical_environments[1]:
+        confounds.append('numerical_environment')
     if baseline_meta.get("scheduling", "offline_batches") != candidate_meta.get("scheduling", "offline_batches"):
         confounds.append("request_scheduling")
     def launch_controls(metadata):
@@ -55,10 +68,12 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
                    if baseline_meta["config"]["engine"].get(k) != candidate_meta["config"]["engine"].get(k)}
     if set(engine_diff) - {"dtype"}:
         confounds.append("engine_parameters")
-    for field in ("packages", "cuda_runtime", "rocm_runtime", "package_sources", "source_revisions"):
+    environment_differences = {}
+    for field in ("python", "platform", "driver_versions", "packages", "cuda_runtime", "rocm_runtime", "package_sources", "source_revisions"):
         default = {} if field in ("package_sources", "source_revisions") else None
         if baseline_meta["environment"].get(field, default) != candidate_meta["environment"].get(field, default):
             confounds.append(f"environment_{field}")
+            environment_differences[field] = [baseline_meta['environment'].get(field, default), candidate_meta['environment'].get(field, default)]
     if len(changed_factors) > 1:
         confounds.append("multiple_setup_factors")
     for key in baseline:
@@ -160,6 +175,9 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
               "baseline_fingerprint": baseline_meta["run_fingerprint"], "candidate_fingerprint": candidate_meta["run_fingerprint"],
               "changed_factors": changed_factors, "confounds": confounds, "engine_differences": engine_diff,
               "baseline_environment": baseline_meta["environment"], "candidate_environment": candidate_meta["environment"],
+              "baseline_client": base_client, "candidate_client": cand_client,
+              "environment_differences": environment_differences,
+              "numerical_environments": numerical_environments,
               "semantic_evaluator": semantic_meta, "workloads": summary, "records": pairs}
     output_dir = Path(output_dir)
     write_json(output_dir / "comparison.json", report)

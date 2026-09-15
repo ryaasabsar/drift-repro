@@ -172,7 +172,7 @@ write_activation() {
         # A source checkout provides models.*, not the built firmware runtime.
         # With no override, TTNN selects its wheel's bundled runtime assets.
         printf 'unset TT_METAL_RUNTIME_ROOT\n'
-        printf 'export DRIFTBENCH_PYTHON=%q\n' "$target/bin/python"
+        printf 'export DRIFTBENCH_PYTHON=%q\n' "$root/.venv-client/bin/python"
         printf 'unset VLLM_TARGET_DEVICE\n'
     } > "$target/activate-tt.sh"
 }

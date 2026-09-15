@@ -176,6 +176,14 @@ def code_stage(directory):
 
 def run_stage(directory, stage, judge_model=None, judge_revision=None, judge_device='cuda'):
     root = Path(directory).resolve()
+    if stage == 'evaluate':
+        # RTX stage: execute isolated code, then score all saved workloads.
+        # Check safety first so a missing A100 stage fails before code execution.
+        report = stage_status(root)
+        if any(s['safety']['status'] == 'pending' for s in report['settings'].values()):
+            raise ValueError('Complete stage safety on A100 before stage evaluate on RTX')
+        run_stage(root, 'code')
+        return run_stage(root, 'final')
     if stage == 'status':
         return stage_status(root)
     with result_lock(root) as paths:

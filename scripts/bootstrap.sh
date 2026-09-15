@@ -12,12 +12,17 @@ if [[ "$mode" != --datasets-only ]]; then
   source scripts/ensure_uv.sh
   if [[ "$mode" == --client-only ]]; then
     # No torch/CUDA/ROCm wheels: a tokenizer client can drive any serving host.
-    uv venv --managed-python --python 3.12 .venv-client
-    uv pip install --python .venv-client/bin/python \
-      'transformers==4.57.6' 'huggingface-hub==0.36.2' 'sentencepiece==0.2.2'
+    if [[ -L .venv-client || ( -e .venv-client && ! -f .venv-client/pyvenv.cfg ) ]]; then
+      echo 'Refusing to replace a symlink or non-venv .venv-client directory.' >&2; exit 1
+    fi
+    if [[ ! -x .venv-client/bin/python ]] || [[ "$(.venv-client/bin/python -c 'import platform; print(platform.python_version())')" != 3.12.14 ]]; then
+      echo 'Preparing the dedicated client environment with Python 3.12.14.'
+      uv venv --managed-python --python 3.12.14 --clear .venv-client
+    fi
+    uv pip sync --python .venv-client/bin/python requirements.client.lock.txt
     uv pip install --python .venv-client/bin/python --no-deps -e .
   else
-    uv venv --managed-python --python 3.12 .venv
+    if [[ ! -x .venv/bin/python ]]; then uv venv --managed-python --python 3.12.14 .venv; fi
     uv pip sync --python .venv/bin/python requirements.lock.txt
     uv pip install --python .venv/bin/python --no-deps -e .
   fi

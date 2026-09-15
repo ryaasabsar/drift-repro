@@ -1,177 +1,123 @@
-# Move inference results between evaluation machines
+# Four stages and two transfers
 
-Use one run folder per experiment. Generate all five workloads on the accelerator,
-judge safety on one fixed A100 environment, and execute HumanEval on the RTX 3060
-system's CPU with Bubblewrap. Code and safety can run in either order. Final scoring
-reads their saved results and needs neither a GPU nor Bubblewrap.
+Run inference on each accelerator, safety labeling on a fixed A100 environment,
+then code and other scoring on RTX 3060. Choose comparisons after gathering the
+scored runs. Inference is never repeated during transfer or evaluation.
 
-Run commands below from the project directory. `scripts/results.sh` uses `.venv/bin/python`;
-set `DRIFTBENCH_PYTHON` to an **absolute Python executable path** to use another prepared
-environment. The serving Python paths still come from the selected suite. All machines
-need the same runner checkout/version; framework environments are needed only for inference,
-and Transformers/PyTorch plus the approved judge model are needed on the safety host.
-The code/final/transfer stages use the existing runner and standard Python libraries.
+Commands are run from the repository root. All hosts use the same checkout and
+common `.venv-client`; serving interpreters are selected independently by the
+suite. `scripts/results.sh` uses the client for inference, transfer and catalog,
+and `.venv` for evaluation/comparison. `DRIFTBENCH_PYTHON` can explicitly override
+this, but inference checks the common client pins. Avoid leaving an unrelated
+serving interpreter in that variable.
 
-## 1. Save inference under a unique run ID
-
-On A100:
+## Inference host
 
 ```bash
-bash scripts/results.sh infer \
-  --config suites/a100.json \
-  --run-id a100-r01
+bash scripts/bootstrap.sh --client-only
+bash scripts/run_mi210.sh --run-id mi210-vllm-r01 --framework vllm
+bash scripts/results.sh stage status results/runs/mi210-vllm-r01
+bash scripts/results.sh handoff results/runs/mi210-vllm-r01 --to safety
 ```
 
-This is **inference only**: no safety model or Bubblewrap check runs. Add `--limit 2`
-for a ten-response smoke run, and give it a different run ID. Use `--dry-run` to inspect
-the plan without downloads or accelerator access. Resume interrupted inference with the
-same command plus `--resume`, on the original host and at the original output path.
+Use `run_a100.sh` or `run_blackhole_p150b.sh` on those machines. P150b also needs
+`--allow-experimental`. Omitting `--framework` runs every available framework;
+filtering vLLM retains all three models and no pending SGLang settings.
+`--limit 2` selects two inputs per workload for a small check. Full runs omit it.
+Each filter/limit/seed/client-code change requires a new run ID. Resume unchanged
+inference on its original host with the same command plus `--resume`.
 
-For MI210 select `suites/mi210.json`. For Blackhole select
-`suites/blackhole-p150b.json` and add `--allow-experimental`:
-that model/board combination is still unverified and requires compatible TT kernels.
-RTX inference experiments are archived; RTX is the code/final evaluation host. Choose a new run ID for every repeat
-or changed setup; defaults go under `results/runs/` (`--output-root` changes that parent).
+## A100 safety host
+
+Copy the one ZIP printed by `handoff` using SFTP, SCP, a shared folder or your
+provider's file-transfer UI. No SSH access from this agent is required.
+
+```bash
+bash scripts/results.sh receive /path/to/INFERENCE.zip --output results/runs/mi210-for-safety
+bash scripts/results.sh stage safety results/runs/mi210-for-safety
+bash scripts/results.sh handoff results/runs/mi210-for-safety --to evaluate
+```
+
+For an A100 inference run, skip the first transfer and label its existing folder.
+Safety uses the same pinned Llama-Guard-3-8B, BF16 CUDA, seed and deterministic
+policy for every run. The inference server must have stopped to release memory.
+The stage requires approved model access. Changing judge software/hardware/policy
+must not mix labels within a run; comparisons check judge provenance.
+
+## RTX code and final scoring host
+
+Copy the newly generated safety ZIP to RTX:
+
+```bash
+bash scripts/results.sh receive /path/to/SAFETY.zip --output results/runs/mi210-for-eval
+bash scripts/results.sh stage evaluate results/runs/mi210-for-eval
+```
+
+`evaluate` requires completed safety labels, executes generated HumanEval code
+with Bubblewrap isolation on CPU, and scores math/long context using saved outputs.
+It reuses valid code results after interruption. No large inference model or safety
+judge is loaded here. The individual `stage code` and `stage final` commands remain
+available. Chat has no single-run accuracy: its CPU embedding comparison happens
+when two runs are compared with `--semantic`.
+
+## Comparison host (RTX)
+
+```bash
+bash scripts/results.sh catalog results/runs
+bash scripts/results.sh compare-many \
+  --baseline results/runs/a100-for-eval/settings/a100_qwen25_7b_vllm \
+  --candidates results/runs/mi210-for-eval/settings/mi210_qwen25_7b_vllm \
+               results/runs/p150b-for-eval/settings/blackhole_p150b_qwen25_7b_vllm \
+  --semantic --allow-confounded --output results/comparisons/qwen25
+```
+
+Use the actual paths printed by `catalog`. Any setting can be the baseline;
+candidates can also be entire suite folders, in which case all their models and
+frameworks are included. Source prompt sets must align. Multiple model/software/
+hardware changes are explicit confounds; `--allow-confounded` acknowledges them
+but does not relax source or evaluator consistency. Reports include per-pair
+viewers plus aggregate CSV/JSON. Incompatible pairs are listed as errors and give
+a nonzero exit status, while valid pairs remain saved.
+
+## Portable folder and integrity
 
 ```text
-results/runs/a100-r01/
-  suite.json
+results/runs/RUN/
+  suite.json                       # Contains only settings selected for this run
   stages.json
-  settings/a100_qwen25_7b_vllm/
-    manifest.json             # Original inference identity and accelerator provenance
+  settings/SETTING/
+    manifest.json                  # Immutable inference identity, client and server provenance
     config.json
     server.json
-    code.jsonl                # Generated responses, not executed code
+    startup-diagnostics.json       # Local diagnostic, not transferred
+    code.jsonl                     # Generated code responses, not evaluation results
     math.jsonl
     safety.jsonl
     chat.jsonl
     long_context.jsonl
-    safety-labels.jsonl        # Added by the safety stage
-    code-results.jsonl         # Added by the code stage, with evaluator provenance
-    evaluation.json           # Added by final scoring
+    safety-labels.jsonl             # Added on A100
+    code-results.jsonl              # Added on RTX
+    evaluation.json                # Final scores
     summary.csv
-    tables/
+    tables/rows.csv
+    datasets/                      # Bundled benchmark files, added during transfer
 ```
 
-A suite directory or an individual setting directory can be passed to every command
-below. Suite commands discover settings relative to the supplied folder; saved absolute
-paths from the inference host are preserved as historical metadata and are not used to
-find responses on the next machine. Imported runs are for evaluation, not inference resume.
+`handoff` embeds the checked `.tar.gz` and `.sha256` inside a single ZIP. `receive`
+verifies the archive hash, file inventory, per-file hashes and inference/evaluation
+fingerprints before publishing the imported directory. It never overwrites an
+existing run or follows absolute paths saved on another machine. Only allowlisted
+results and benchmark snapshots are transferred: no credentials, weights, caches,
+environments or raw server logs. Keep diagnostics on the source host if debugging.
+Checksums detect corruption; they are not sender authentication.
 
-## 2. Run safety on the fixed evaluation host
+`receive` without `--output` chooses `results/runs/<ZIP-name>`. Each handoff has a
+unique name and carries the latest labels forward. Older two-file `pack RUN
+--output FILE.tar.gz` and `unpack FILE.tar.gz --output NEW_DIR` commands remain
+supported unchanged. Imported runs can be evaluated and compared, but inference
+resume is restricted to their original host/folder.
 
-If inference ran on A100, no transfer is needed yet:
-
-```bash
-bash scripts/results.sh stage safety results/runs/a100-r01
-```
-
-This defaults to the locked `meta-llama/Llama-Guard-3-8B` revision and GPU evaluation.
-Run it after inference has stopped and released the GPU. For another pinned judge use
-`--judge-model MODEL --judge-revision COMMIT`; `--judge-device cpu` is available, but
-CPU and GPU judging have different precision/environment metadata. Use the **same model,
-revision, precision, and evaluation environment for all experiments you intend to compare**.
-The stage does not execute generated code.
-
-For MI210/Blackhole inference, pack and transfer the run to A100 first using step 3.
-Then run this same command on the unpacked directory. Rerunning a safety stage resumes
-saved labels when outputs and judge environment match; mismatches are rejected.
-
-## 3. Pack, move, and unpack
-
-On the sending machine, after the current stage finishes:
-
-```bash
-bash scripts/results.sh pack results/runs/a100-r01 \
-  --output results/transfers/a100-r01-safety.tar.gz
-```
-
-Move these two files together, for example through the host's file download interface
-or as GitHub Release assets:
-
-```text
-a100-r01-safety.tar.gz
-a100-r01-safety.tar.gz.sha256
-```
-
-The bundle contains manifests, responses, stage artifacts, and the **exact benchmark
-files needed to score those responses**. No separate dataset download is required after
-import. Packaging uses an explicit file allowlist: credentials, caches, model weights,
-environments, logs and unrelated files are excluded. Derived tables are regenerated.
-Keep the sending copy until the imported copy has been verified. Archives and checksums
-are snapshots; export a new filename after each stage instead of replacing an old archive.
-
-On the receiving RTX 3060 system:
-
-```bash
-bash scripts/results.sh unpack \
-  results/transfers/a100-r01-safety.tar.gz \
-  --output results/runs/a100-r01
-
-bash scripts/results.sh stage status results/runs/a100-r01
-```
-
-Unpacking verifies the outer checksum, every included file, inference identities, and
-available evaluation artifacts. It refuses an existing destination and unsafe archive
-paths. Use a **new destination** when receiving a later stage of the same run, e.g.
-`results/runs/a100-r01-after-code`. Renaming the outer folder does not
-change the experiment identity. Checksum verification detects transfer corruption;
-it is not an authenticity signature.
-
-## 4. Execute code, then finalize
-
-On the RTX 3060 system with a working Bubblewrap sandbox:
-
-```bash
-bash scripts/results.sh stage code results/runs/a100-r01
-bash scripts/results.sh stage final results/runs/a100-r01
-```
-
-`code` evaluates only HumanEval on CPU. It appends one result per response, resumes missing
-responses, and preserves detailed Bubblewrap errors. Saved scores retain the code evaluator
-version, execution environment, and source/output hashes. A completed code stage can be
-reused without executing code again.
-
-`final` requires all applicable code and safety results. It incorporates those results,
-scores math and long context, writes `evaluation.json`, `summary.csv`, and per-response
-tables, and updates stage/suite status. It never loads a judge or executes generated code.
-Chat remains `pairwise_only` until two runs are compared; this is expected, not a missing
-stage. Original inference responses, timings, model settings, and accelerator provenance
-remain unchanged.
-
-You may instead execute code first, pack that result, then unpack it on A100 for safety
-and final scoring. Carry the **latest complete folder forward** through the stages. Do not
-unpack two independently evaluated copies over each other; this workflow deliberately
-avoids implicit merging or overwriting of results.
-
-## 5. Compare evaluated settings
-
-On your analysis machine, use the setting directories (not the suite root):
-
-```bash
-bash scripts/results.sh compare \
-  results/runs/a100-r01/settings/a100_qwen25_7b_vllm \
-  results/runs/mi210-r01/settings/mi210_qwen25_7b_vllm \
-  --semantic --allow-confounded \
-  --output results/comparisons/a100-vs-mi210-qwen25-7b
-```
-
-The example labels the CUDA/ROCm software-stack differences explicitly with
-`--allow-confounded`; it is a comparison of complete setups, not proof of a hardware-only
-effect. This flag does not waive evaluator compatibility checks. Existing RTX results
-from Qwen3.5-0.8B are a different-model experiment; use matching inference models and
-controls when you want to study hardware/framework drift. Semantic comparison uses the
-locked embedding model on CPU and may need its first download.
-
-## Status and reruns
-
-`stage status FOLDER` derives completion from verified files instead of trusting an old
-status flag. `stages.json` is refreshed by stage commands and import. Finalized suite
-entries become `complete`, and their old inference plan remains unchanged. An interrupted
-stage is rerun using the same command; already saved compatible results are reused.
-Do not run two operations against the same folder at once: the commands acquire the
-same run/suite locks used by inference.
-
-Old result folders produced by `run_a100.sh --inference-only` can also be packed and
-staged. Keep matching benchmark files in the source checkout for the initial pack;
-thereafter they travel inside the bundle. Use `stage` for all new evaluation work; one-shot scoring has been removed from the active CLI.
+Old inference results remain readable. Their missing client-package provenance
+is reported explicitly in comparisons. Older partially completed, unfiltered
+suites must be completed or transferred as individual complete setting folders;
+new filtered runs have no unselected pending entries.

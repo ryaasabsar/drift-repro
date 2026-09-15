@@ -29,6 +29,8 @@ def planned_batches(rows, config):
 
 def prepare(config_path, workload_names, limit=None):
     local_environment()
+    from .software import require_client
+    require_client()
     from huggingface_hub import HfApi
     from transformers import AutoTokenizer
     config = read_json(config_path)

@@ -6,6 +6,8 @@ from pathlib import Path, PurePosixPath
 import shutil
 import tarfile
 import tempfile
+import zipfile
+import uuid
 
 from .common import WORKLOADS, now, read_json, write_json
 from .evaluation import DATASET_DIR, EVALUATOR_VERSION
@@ -17,6 +19,44 @@ SETTING_FILES = {'manifest.json', 'config.json', 'server.json', 'evaluation.json
                  'code-results.jsonl', 'safety-labels.jsonl', 'stages.json'} | {f'{w}.jsonl' for w in WORKLOADS}
 MAX_BYTES = 8 * 1024**3
 MAX_FILES = 10000
+
+
+def handoff(directory, target, output_dir='results/transfers'):
+    """One file per transfer, retaining the existing checked tar format inside."""
+    if target not in ('safety', 'evaluate'):
+        raise ValueError('Handoff target must be safety or evaluate')
+    root = Path(directory).resolve()
+    status = stage_status(root)
+    if target == 'evaluate' and any(s['safety']['status'] == 'pending' for s in status['settings'].values()):
+        raise ValueError('Complete safety labeling on A100 before handing off to RTX')
+    destination = Path(output_dir) / f'{root.name}-to-{target}-{uuid.uuid4().hex[:8]}.zip'
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='driftbench-handoff-') as temporary:
+        archive = Path(temporary) / 'results.tar.gz'
+        pack(root, archive)
+        with zipfile.ZipFile(destination, 'x', compression=zipfile.ZIP_STORED) as bundle:
+            bundle.write(archive, archive.name)
+            bundle.write(str(archive) + '.sha256', archive.name + '.sha256')
+    return {'bundle': str(destination), 'bytes': destination.stat().st_size,
+            'target_stage': target, 'next': f'Copy this ONE file to the next host, then: bash scripts/results.sh receive {destination}'}
+
+
+def receive(bundle, output=None):
+    bundle = Path(bundle).absolute()
+    output = Path(output) if output else Path('results/runs') / bundle.stem
+    with zipfile.ZipFile(bundle) as container, tempfile.TemporaryDirectory(prefix='driftbench-receive-') as temporary:
+        names = ['results.tar.gz', 'results.tar.gz.sha256']
+        if sorted(container.namelist()) != sorted(names):
+            raise ValueError('Transfer bundle must contain exactly one archive and its checksum')
+        for name in names:
+            entry = container.getinfo(name)
+            limit = MAX_BYTES if name.endswith('.gz') else 4096
+            if entry.file_size > limit:
+                raise ValueError('Transfer container exceeds size limits')
+            with container.open(entry) as source, (Path(temporary) / name).open('xb') as target:
+                shutil.copyfileobj(source, target)
+        result = unpack(Path(temporary) / names[0], output)
+    return {**result, 'next': f'bash scripts/results.sh stage status {output}'}
 
 
 def file_hash(path):

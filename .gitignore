@@ -15,4 +15,5 @@ docs/paper.pdf
 /.env.*
 !/.env.example
 
-.archive/
+.archive/*
+!.archive/checks/

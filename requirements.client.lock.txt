@@ -1,0 +1,93 @@
+certifi==2026.7.22
+    # via
+    #   -c requirements.lock.txt
+    #   requests
+charset-normalizer==3.5.1
+    # via
+    #   -c requirements.lock.txt
+    #   requests
+filelock==3.32.6
+    # via
+    #   -c requirements.lock.txt
+    #   huggingface-hub
+    #   transformers
+fsspec==2026.7.0
+    # via
+    #   -c requirements.lock.txt
+    #   huggingface-hub
+hf-xet==1.6.0
+    # via
+    #   -c requirements.lock.txt
+    #   huggingface-hub
+huggingface-hub==0.36.2
+    # via
+    #   -c requirements.lock.txt
+    #   -r requirements.client.in
+    #   tokenizers
+    #   transformers
+idna==3.19
+    # via
+    #   -c requirements.lock.txt
+    #   requests
+jinja2==3.1.6
+    # via
+    #   -c requirements.lock.txt
+    #   -r requirements.client.in
+markupsafe==3.0.3
+    # via
+    #   -c requirements.lock.txt
+    #   jinja2
+numpy==2.2.6
+    # via
+    #   -c requirements.lock.txt
+    #   -r requirements.client.in
+    #   transformers
+packaging==26.3
+    # via
+    #   -c requirements.lock.txt
+    #   huggingface-hub
+    #   transformers
+pyyaml==6.0.3
+    # via
+    #   -c requirements.lock.txt
+    #   huggingface-hub
+    #   transformers
+regex==2026.9.3
+    # via
+    #   -c requirements.lock.txt
+    #   transformers
+requests==2.34.2
+    # via
+    #   -c requirements.lock.txt
+    #   huggingface-hub
+    #   transformers
+safetensors==0.8.0
+    # via
+    #   -c requirements.lock.txt
+    #   transformers
+sentencepiece==0.2.2
+    # via
+    #   -c requirements.lock.txt
+    #   -r requirements.client.in
+tokenizers==0.22.2
+    # via
+    #   -c requirements.lock.txt
+    #   -r requirements.client.in
+    #   transformers
+tqdm==4.70.0
+    # via
+    #   -c requirements.lock.txt
+    #   huggingface-hub
+    #   transformers
+transformers==4.57.6
+    # via
+    #   -c requirements.lock.txt
+    #   -r requirements.client.in
+typing-extensions==4.16.0
+    # via
+    #   -c requirements.lock.txt
+    #   huggingface-hub
+urllib3==2.7.0
+    # via
+    #   -c requirements.lock.txt
+    #   requests

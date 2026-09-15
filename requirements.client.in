@@ -1,0 +1,7 @@
+# Common CPU tokenizer client for every inference host.
+transformers==4.57.6
+tokenizers==0.22.2
+huggingface-hub==0.36.2
+sentencepiece==0.2.2
+numpy==2.2.6
+jinja2==3.1.6

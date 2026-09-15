@@ -140,7 +140,13 @@ def serve(config_path, dry_run=False):
     with activity("Checking serving hardware and environment", stage="startup", setting=config.get("setup_id")):
         configure_serving_environment(config)
         environment = discover()
+        from .software import check_runtime
+        audit = check_runtime(config, environment)
+        write_json(Path(config['server']['metadata_path']).parent / 'startup-diagnostics.json',
+                   {'environment': environment, 'runtime_contract': audit})
         require_hardware(config["hardware"]["vendor"], environment)
+        if audit['status'] != 'match':
+            raise RuntimeError(f'Serving runtime differs from its declared baseline: {audit["differences"]}. See runtime-contracts.json and startup-diagnostics.json')
         if config["backend"] not in environment["packages"]:
             raise RuntimeError(f"Install {config['backend']} in this Python environment before serving")
     pinned_snapshot = None

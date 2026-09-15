@@ -16,6 +16,9 @@ def main():
     serve.add_argument("--dry-run", action="store_true", help="Print argv without loading models or accessing GPUs")
     doctor = sub.add_parser("doctor", help="Inspect accelerators and framework versions on this host")
     doctor.add_argument("--output")
+    doctor.add_argument('--config', help='One serving config: apply its environment and check its runtime contract')
+    doctor.add_argument('--suite', help='Check each selected serving environment in a suite')
+    doctor.add_argument('--framework', nargs='+', choices=['vllm', 'sglang'])
     status = sub.add_parser("status", help="Show saved counts and last recorded activity for a run or suite")
     status.add_argument("run_dir")
     status.add_argument("--json", action="store_true", help="Emit JSON; with --watch, emit one JSON object per update")
@@ -30,8 +33,10 @@ def main():
     infer.add_argument("--resume", action="store_true")
     infer.add_argument("--dry-run", action="store_true")
     infer.add_argument("--allow-experimental", action="store_true")
+    infer.add_argument("--framework", nargs="+", choices=["vllm", "sglang"], help="Run only these frameworks, across all selected models")
+    infer.add_argument("--settings", nargs="+", help="Optional setting IDs; combined with the framework filter")
     stage = sub.add_parser("stage", help="Evaluate saved runs on separate hosts; accepts a suite or setting folder")
-    stage.add_argument("stage", choices=["status", "safety", "code", "final"])
+    stage.add_argument("stage", choices=["status", "safety", "code", "final", "evaluate"])
     stage.add_argument("run_dir")
     stage.add_argument("--judge-model", help="Defaults to pinned Llama-Guard-3-8B")
     stage.add_argument("--judge-revision")
@@ -42,6 +47,13 @@ def main():
     unpack = sub.add_parser("unpack", help="Verify and import a bundle into a new result folder")
     unpack.add_argument("archive")
     unpack.add_argument("--output", required=True, help="New destination directory, never an existing run")
+    handoff = sub.add_parser('handoff', help='Make ONE portable file for the next evaluation host')
+    handoff.add_argument('run_dir')
+    handoff.add_argument('--to', choices=['safety', 'evaluate'], required=True)
+    handoff.add_argument('--output-dir', default='results/transfers')
+    receive = sub.add_parser('receive', help='Verify and import a one-file handoff')
+    receive.add_argument('bundle')
+    receive.add_argument('--output', help='New directory; defaults to results/runs/<bundle-name>')
     for name in ("run", "preflight"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--config", required=True)
@@ -56,6 +68,15 @@ def main():
     compare.add_argument("--output", required=True)
     compare.add_argument("--semantic", action="store_true", help="Compute chat embedding cosine drift on CPU")
     compare.add_argument("--allow-confounded", action="store_true", help="Label and allow multiple changed setup factors")
+    catalog = sub.add_parser('catalog', help='List saved setting paths that can be selected for comparisons')
+    catalog.add_argument('roots', nargs='+')
+    many = sub.add_parser('compare-many', help='Compare any baseline setting with settings or whole suites')
+    many.add_argument('--baseline', required=True)
+    many.add_argument('--candidates', nargs='+', required=True)
+    many.add_argument('--output', required=True)
+    many.add_argument('--semantic', action='store_true')
+    many.add_argument('--allow-confounded', action='store_true')
+    many.add_argument('--dry-run', action='store_true')
     export = sub.add_parser("export", help="Save one setting's per-prompt CSV/JSONL tables")
     export.add_argument("run_dir")
     export.add_argument("--output")
@@ -67,6 +88,7 @@ def main():
     suite.add_argument("--config", required=True)
     suite.add_argument("--output", required=True)
     suite.add_argument("--settings", nargs="+", help="Only run these setting IDs from the suite")
+    suite.add_argument("--framework", nargs="+", choices=["vllm", "sglang"])
     suite.add_argument("--limit", type=int, help="First N prompts per workload; default is the suite's selection")
     suite.add_argument("--workloads", nargs="+", choices=list(WORKLOADS))
     suite.add_argument("--device", help="Visible NVIDIA/AMD accelerator indices, e.g. 0")
@@ -131,14 +153,15 @@ def dispatch(args):
         output = Path(args.output_root) / args.run_id
         if (output / 'transfer.json').exists():
             raise ValueError('Imported runs are for evaluation; resume inference on the original host/folder')
-        plan = load_plan(args.config, output, args.limit, args.workloads, args.device)
+        filters = {"selected": getattr(args, 'settings', None), "frameworks": getattr(args, 'framework', None)}
+        plan = load_plan(args.config, output, args.limit, args.workloads, args.device, **filters)
         experimental = any(s['config'].get('validation', {}).get('status') == 'experimental_unverified' for s in plan['settings'])
         if experimental and not args.allow_experimental and not args.dry_run:
             raise ValueError('This model/board preset is unverified; use --allow-experimental to attempt it')
         if not args.dry_run:
             load_credentials()
         result = run_suite(args.config, output, limit=args.limit, workloads=args.workloads, device=args.device,
-                           resume=args.resume, dry_run=args.dry_run, inference_only=True)
+                           resume=args.resume, dry_run=args.dry_run, inference_only=True, **filters)
         if args.dry_run:
             print(json.dumps(result, indent=2))
         elif result['status'] == 'failed':
@@ -153,6 +176,12 @@ def dispatch(args):
     elif args.command == 'pack':
         from .transfer import pack
         print(json.dumps(pack(args.run_dir, args.output), indent=2))
+    elif args.command == 'handoff':
+        from .transfer import handoff
+        print(json.dumps(handoff(args.run_dir, args.to, args.output_dir), indent=2))
+    elif args.command == 'receive':
+        from .transfer import receive
+        print(json.dumps(receive(args.bundle, args.output), indent=2))
     elif args.command == 'unpack':
         from .transfer import unpack
         print(json.dumps(unpack(args.archive, args.output), indent=2))
@@ -164,12 +193,14 @@ def dispatch(args):
         from .serving import serve
         serve(args.config, args.dry_run)
     elif args.command == "doctor":
-        from .hardware import discover
+        from .diagnostics import doctor
         from .common import write_json
-        result = discover()
+        result = doctor(args.config, args.suite, args.framework)
         if args.output:
             write_json(args.output, result)
         print(json.dumps(result, indent=2))
+        if result.get('status') == 'failed':
+            raise SystemExit(1)
     elif args.command in ("run", "preflight"):
         from .inference import run
         result = run(args.config, getattr(args, "output", ""), args.workloads, args.limit,
@@ -179,6 +210,15 @@ def dispatch(args):
     elif args.command == "compare":
         from .comparison import compare_runs
         compare_runs(args.baseline, args.candidate, args.output, args.semantic, args.allow_confounded)
+    elif args.command == 'catalog':
+        from .compare_many import catalog
+        print(json.dumps(catalog(args.roots), indent=2))
+    elif args.command == 'compare-many':
+        from .compare_many import compare_many
+        result = compare_many(args.baseline, args.candidates, args.output, args.semantic, args.allow_confounded, args.dry_run)
+        print(json.dumps(result, indent=2))
+        if result.get('status') == 'incompatible':
+            raise SystemExit(1)
     elif args.command == "export":
         from .tables import export_run
         rows = export_run(args.run_dir, args.output)
@@ -190,7 +230,7 @@ def dispatch(args):
     elif args.command == "suite":
         from .suite import run_suite
         result = run_suite(args.config, args.output, args.settings, args.limit, args.workloads, args.device,
-                           args.resume, args.dry_run, True, args.continue_on_error)
+                           args.resume, args.dry_run, True, args.continue_on_error, args.framework)
         if args.dry_run:
             print(json.dumps(result, indent=2))
         else:

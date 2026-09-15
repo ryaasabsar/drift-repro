@@ -4,7 +4,9 @@
   "model": "meta-llama/Llama-3.1-8B-Instruct",
   "revision": "0e9e39f249a16976918f6564b8830bc894c89659",
   "prompt_format": "chat",
-  "chat_template_kwargs": {},
+  "chat_template_kwargs": {
+    "date_string": "15 Sep 2026"
+  },
   "seed": 42,
   "batch_size": 1,
   "generation": {
