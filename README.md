@@ -48,6 +48,23 @@ the same command, filters and run ID plus `--resume` on the original host.
 Changed filters, client code or experimental controls require a new run ID.
 Inference never loads the safety judge or executes generated code.
 
+For separate small-model verification, use `Qwen/Qwen3.5-0.8B` (chat, thinking
+disabled) and `meta-llama/Llama-3.2-1B-Instruct` with the existing host wrappers:
+
+```bash
+bash scripts/run_a100.sh --config suites/a100-small.json --framework vllm --limit 2 --run-id a100-small-smoke
+bash scripts/run_mi210.sh --config suites/mi210-small.json --framework vllm --limit 2 --run-id mi210-small-smoke
+bash scripts/run_blackhole_p150b.sh --config suites/blackhole-p150b-small.json --framework vllm --limit 2 --run-id p150b-small-smoke --allow-experimental
+```
+
+Each command selects two models and five workloads: 20 responses per host.
+Use `--framework sglang` on NVIDIA/AMD once that serving environment is installed.
+Omit `--limit` for all prompts. These suites retain the same generation controls
+and Llama Guard 3-8B evaluation; the larger-model suites remain available.
+Llama 3.2 requires its own approved model access. The P150b profiles are
+experimental: architecture registration does not establish support for these
+exact checkpoints or the configured context length.
+
 **Comparability:** the tokenizer client, prompts and sampling controls match.
 Serving dependencies cannot all be identical across vendors/frameworks:
 NVIDIA/AMD target the same upstream releases, while the pinned TT plugin needs

@@ -1,0 +1,30 @@
+{
+  "suite_id": "blackhole-p150b-small",
+  "workloads": [
+    "code",
+    "math",
+    "safety",
+    "chat",
+    "long_context"
+  ],
+  "limit": null,
+  "settings": [
+    {
+      "id": "blackhole_p150b_qwen35_08b_vllm",
+      "config": "../configs/blackhole-p150b-qwen35-0.8b-vllm-http.json",
+      "server_python": "../.venv-tt-vllm/bin/python"
+    },
+    {
+      "id": "blackhole_p150b_llama32_1b_instruct_vllm",
+      "config": "../configs/blackhole-p150b-llama32-1b-instruct-vllm-http.json",
+      "server_python": "../.venv-tt-vllm/bin/python"
+    }
+  ],
+  "evaluation": {
+    "judge_model": "meta-llama/Llama-Guard-3-8B",
+    "judge_revision": "7327bd9f6efbbe6101dc6cc4736302b3cbb6e425",
+    "judge_device": "cuda",
+    "code": true
+  },
+  "comparisons": []
+}

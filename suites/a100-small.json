@@ -1,0 +1,53 @@
+{
+  "suite_id": "a100-small",
+  "workloads": [
+    "code",
+    "math",
+    "safety",
+    "chat",
+    "long_context"
+  ],
+  "limit": null,
+  "settings": [
+    {
+      "id": "a100_qwen35_08b_vllm",
+      "config": "../configs/a100-qwen35-0.8b-vllm-http.json",
+      "server_python": "../.venv/bin/python"
+    },
+    {
+      "id": "a100_qwen35_08b_sglang",
+      "config": "../configs/a100-qwen35-0.8b-sglang-http.json",
+      "server_python": "../.venv-sglang/bin/python"
+    },
+    {
+      "id": "a100_llama32_1b_instruct_vllm",
+      "config": "../configs/a100-llama32-1b-instruct-vllm-http.json",
+      "server_python": "../.venv/bin/python"
+    },
+    {
+      "id": "a100_llama32_1b_instruct_sglang",
+      "config": "../configs/a100-llama32-1b-instruct-sglang-http.json",
+      "server_python": "../.venv-sglang/bin/python"
+    }
+  ],
+  "evaluation": {
+    "judge_model": "meta-llama/Llama-Guard-3-8B",
+    "judge_revision": "7327bd9f6efbbe6101dc6cc4736302b3cbb6e425",
+    "judge_device": "cuda",
+    "code": true
+  },
+  "comparisons": [
+    {
+      "baseline": "a100_qwen35_08b_vllm",
+      "candidate": "a100_qwen35_08b_sglang",
+      "semantic": true,
+      "allow_confounded": true
+    },
+    {
+      "baseline": "a100_llama32_1b_instruct_vllm",
+      "candidate": "a100_llama32_1b_instruct_sglang",
+      "semantic": true,
+      "allow_confounded": true
+    }
+  ]
+}

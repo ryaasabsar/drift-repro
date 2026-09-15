@@ -1,0 +1,62 @@
+{
+  "setup_id": "mi210_llama32_1b_instruct_sglang",
+  "backend": "sglang",
+  "model": "meta-llama/Llama-3.2-1B-Instruct",
+  "revision": "9213176726f574b556790deb65791e0c5aa438b6",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {
+    "date_string": "15 Sep 2026"
+  },
+  "seed": 42,
+  "batch_size": 1,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "min_p": 0.0
+  },
+  "engine": {
+    "dtype": "bfloat16",
+    "max_model_len": 32768,
+    "tensor_parallel_size": 1,
+    "mem_fraction_static": 0.8,
+    "max_running_requests": 1,
+    "chunked_prefill_size": 2048,
+    "disable_radix_cache": true,
+    "disable_cuda_graph": true,
+    "attention_backend": "triton",
+    "disable_overlap_schedule": true,
+    "disable_piecewise_cuda_graph": true,
+    "enable_deterministic_inference": true,
+    "sampling_defaults": "openai"
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "amd",
+    "device": "AMD Instinct MI210 64GB"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8002",
+    "metadata_path": "results/servers/mi210-llama32-1b-instruct-sglang-http.json",
+    "timeout_seconds": 900
+  },
+  "launch": {
+    "startup_timeout_seconds": 900,
+    "env": {
+      "SGLANG_USE_AITER": "0",
+      "PYTHONHASHSEED": "42"
+    }
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "reference_sglang_version": "0.5.10.post1",
+    "note": "Small-model verification profile. This exact checkpoint with these full-context settings has not been validated on this host. Sampling and engine controls are inherited from the larger-model profile. Requires approved Hugging Face access to meta-llama/Llama-3.2-1B-Instruct."
+  }
+}

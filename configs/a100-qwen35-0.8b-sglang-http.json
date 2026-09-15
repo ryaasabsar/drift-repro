@@ -1,0 +1,66 @@
+{
+  "setup_id": "a100_qwen35_08b_sglang",
+  "backend": "sglang",
+  "model": "Qwen/Qwen3.5-0.8B",
+  "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "seed": 42,
+  "batch_size": 1,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "min_p": 0.0
+  },
+  "engine": {
+    "dtype": "bfloat16",
+    "max_model_len": 32768,
+    "tensor_parallel_size": 1,
+    "mem_fraction_static": 0.8,
+    "max_running_requests": 1,
+    "chunked_prefill_size": 2048,
+    "disable_radix_cache": true,
+    "disable_cuda_graph": true,
+    "attention_backend": "triton",
+    "disable_overlap_schedule": true,
+    "disable_piecewise_cuda_graph": true,
+    "max_mamba_cache_size": 1,
+    "enable_deterministic_inference": true,
+    "sampling_defaults": "openai"
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "nvidia",
+    "device": "NVIDIA A100 40GB"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8002",
+    "metadata_path": "results/servers/a100-qwen35-0.8b-sglang-http.json",
+    "timeout_seconds": 900
+  },
+  "launch": {
+    "startup_timeout_seconds": 900,
+    "cuda_version": "12.8.1",
+    "workspace_gcc": true,
+    "extra_args": [],
+    "env": {
+      "PYTHONHASHSEED": "42",
+      "CUBLAS_WORKSPACE_CONFIG": ":4096:8"
+    }
+  },
+  "validation": {
+    "status": "hardware_pending",
+    "reference_sglang_version": "0.5.10.post1",
+    "note": "Small-model verification profile. This exact checkpoint with these full-context settings has not been validated on this host. Sampling and engine controls are inherited from the larger-model profile."
+  }
+}

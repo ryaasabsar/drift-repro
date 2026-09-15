@@ -1,0 +1,63 @@
+{
+  "setup_id": "blackhole_p150b_qwen35_08b_vllm",
+  "backend": "vllm",
+  "model": "Qwen/Qwen3.5-0.8B",
+  "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+  "prompt_format": "chat",
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "seed": 42,
+  "batch_size": 1,
+  "generation": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "max_tokens": 512,
+    "repetition_penalty": 1.0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "min_p": 0.0
+  },
+  "engine": {
+    "max_model_len": 32768,
+    "max_num_seqs": 1,
+    "max_num_batched_tokens": 32768,
+    "block_size": 64,
+    "additional_config": {
+      "tt": {}
+    }
+  },
+  "batch_size_by_workload": {
+    "long_context": 1
+  },
+  "transport": "http",
+  "hardware": {
+    "vendor": "tenstorrent",
+    "device": "Tenstorrent Blackhole P150b"
+  },
+  "server": {
+    "base_url": "http://127.0.0.1:8001",
+    "metadata_path": "results/servers/blackhole-p150b-qwen35-0.8b-vllm-http.json",
+    "timeout_seconds": 1800,
+    "return_token_ids": false
+  },
+  "launch": {
+    "startup_timeout_seconds": 3600,
+    "env": {
+      "VLLM_CONFIGURE_LOGGING": "1",
+      "TORCHDYNAMO_DISABLE": "1",
+      "MESH_DEVICE": "P150",
+      "ARCH_NAME": "blackhole",
+      "PYTHONHASHSEED": "42"
+    }
+  },
+  "validation": {
+    "status": "experimental_unverified",
+    "reference_vllm_version": "0.25.1",
+    "references": [
+      "https://github.com/tenstorrent/vllm-tt-plugin/tree/compat/vllm-0.25.1"
+    ],
+    "note": "Small-model verification profile. This exact checkpoint with these full-context settings has not been validated on this host. Sampling and engine controls are inherited from the larger-model profile. The pinned TT plugin registers this architecture, but exact checkpoint, P150b kernel support and internal precision remain unverified. Requires --allow-experimental; no checkpoint substitution."
+  }
+}
