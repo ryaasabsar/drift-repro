@@ -6,7 +6,7 @@
   "prompt_format": "chat",
   "chat_template_kwargs": {},
   "seed": 42,
-  "batch_size": 1,
+  "batch_size": 4,
   "generation": {
     "temperature": 0.0,
     "top_p": 1.0,
@@ -19,7 +19,7 @@
   },
   "engine": {
     "max_model_len": 32768,
-    "max_num_seqs": 1,
+    "max_num_seqs": 4,
     "max_num_batched_tokens": 32768,
     "block_size": 64,
     "additional_config": {

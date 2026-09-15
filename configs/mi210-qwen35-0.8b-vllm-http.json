@@ -8,7 +8,7 @@
     "enable_thinking": false
   },
   "seed": 42,
-  "batch_size": 1,
+  "batch_size": 4,
   "generation": {
     "temperature": 0.0,
     "top_p": 1.0,
@@ -22,11 +22,11 @@
   "engine": {
     "dtype": "bfloat16",
     "max_model_len": 32768,
-    "max_num_seqs": 1,
+    "max_num_seqs": 4,
     "max_num_batched_tokens": 2048,
     "gpu_memory_utilization": 0.8,
     "tensor_parallel_size": 1,
-    "enforce_eager": true,
+    "enforce_eager": false,
     "enable_prefix_caching": false,
     "language_model_only": true
   },
