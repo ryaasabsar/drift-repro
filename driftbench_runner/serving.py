@@ -110,6 +110,17 @@ def configure_serving_environment(config):
     if any(k in ("HOME", "CODEX_HOME") or any(s in k.upper() for s in ("TOKEN", "PASSWORD", "SECRET", "API_KEY")) for k in overrides):
         raise ValueError("Keep credentials and system directories out of launch.env")
     os.environ.update({k: str(v) for k, v in overrides.items()})
+    # Ray expects a HIP mask. Keep the scheduler's ROCr restriction and select
+    # logical GPU 0 only when it exposes a single device and no mask conflicts.
+    if (config.get("hardware", {}).get("vendor") == "amd"
+            and config.get("backend") == "vllm"
+            and "HIP_VISIBLE_DEVICES" not in os.environ
+            and re.fullmatch(r"(?:[0-9]+|GPU-[0-9a-fA-F-]+)", os.environ.get("ROCR_VISIBLE_DEVICES", ""))
+            and all(os.environ.get(key) in (None, "0")
+                    for key in ("CUDA_VISIBLE_DEVICES", "GPU_DEVICE_ORDINAL"))):
+        os.environ["HIP_VISIBLE_DEVICES"] = "0"
+        event("Set HIP_VISIBLE_DEVICES=0 within the existing single-GPU ROCr allocation",
+              stage="startup")
     if launch.get("cuda_version"):
         version = launch["cuda_version"]
         if version not in ("12.8.1", "13.0.2") or config["hardware"]["vendor"] != "nvidia":
