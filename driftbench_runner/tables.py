@@ -213,7 +213,8 @@ def write_browser(path, rows, report):
     # Escape embedded data and use textContent throughout. Model output is data.
     payload = json.dumps(rows, ensure_ascii=False).replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
     note = html.escape("Changed factors: " + (", ".join(report["changed_factors"]) or "none") +
-                       ". Changed controls: " + (", ".join(report["confounds"]) or "none"))
+                       ". Changed controls: " + (", ".join(report["confounds"]) or "none") +
+                       ". " + report.get("evaluation_note", ""))
     page = '''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DriftBench row comparison</title>
 <style>body{font:16px system-ui;margin:2rem;max-width:1500px}select,input{font:inherit;padding:.4rem;margin:.3rem}table{border-collapse:collapse;width:100%;table-layout:fixed}td,th{border:1px solid #ddd;padding:.6rem;text-align:left;vertical-align:top;overflow-wrap:anywhere}pre{white-space:pre-wrap;word-break:break-word;max-height:28rem;overflow:auto;font:14px monospace}.change{background:#fff1c2}details{padding:.6rem;border-bottom:1px solid #ddd}summary{cursor:pointer}small{color:#555}</style>
 <h1>DriftBench row comparison</h1><p>__NOTE__</p>

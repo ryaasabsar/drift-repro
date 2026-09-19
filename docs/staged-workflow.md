@@ -75,7 +75,10 @@ Use the actual paths printed by `catalog`. Any setting can be the baseline;
 candidates can also be entire suite folders, in which case all their models and
 frameworks are included. Source prompt sets must align. Multiple model/software/
 hardware changes are explicit confounds; `--allow-confounded` acknowledges them
-but does not relax source or evaluator consistency. Reports include per-pair
+and permits different safety-judge runtimes with matching model, revision and
+labeling protocol. Reports preserve both judges and flag this confound: safety
+flips may reflect evaluator differences as well as changed responses. Source
+checks and other evaluator checks remain strict. Reports include per-pair
 viewers plus aggregate CSV/JSON. Incompatible pairs are listed as errors and give
 a nonzero exit status, while valid pairs remain saved.
 

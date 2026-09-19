@@ -150,9 +150,12 @@ models. To compare only matching models, supply their individual setting paths.
 sets or evaluators are reported explicitly and produce a nonzero exit status;
 they are never counted as zero drift.
 
-`--allow-confounded` permits and labels changed model/software/engine controls;
-it never bypasses source-prompt or evaluator checks. Omit it when testing a strict
-comparison. Token-sequence comparisons require the same model/revision. The
+`--allow-confounded` permits and labels changed model/software/engine controls
+and safety-judge runtimes when the judge model, revision, template, label policy,
+seed and decoding settings match. Both judge implementations are preserved;
+safety flips may include evaluator differences and cannot be attributed solely
+to inference hardware. Source-prompt checks and other evaluator checks remain strict.
+Omit the flag when testing a strict comparison. Token-sequence comparisons require the same model/revision. The
 original two-directory `compare BASELINE CANDIDATE --output ...` command remains.
 
 | Workload | Published inputs | Evaluation |

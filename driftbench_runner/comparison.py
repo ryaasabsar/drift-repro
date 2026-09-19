@@ -6,6 +6,32 @@ from .evaluation import load_run, wilson
 from .logging import activity, event
 
 
+def matching_judge_protocol(a, b):
+    """Allow different runtimes only with explicit, matching safety semantics."""
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
+    for field in ("model", "revision", "template", "family", "binary_policy", "decoding"):
+        if not a.get(field) or a[field] != b.get(field):
+            return False
+    seeds = [j.get("reproducibility", {}).get("seed") for j in (a, b)]
+    if seeds[0] is None or seeds[0] != seeds[1]:
+        return False
+    # Transformers records decoding; the HTTP judge also records sampling
+    # parameters. Missing HTTP metadata is equivalent only to these greedy defaults.
+    if a.get("generation") != b.get("generation"):
+        decoding = a["decoding"]
+        if decoding.get("do_sample") is not False or decoding.get("num_beams") != 1:
+            return False
+        defaults = {"temperature": 0.0, "top_p": 1.0, "top_k": -1, "min_p": 0.0,
+                    "max_tokens": decoding.get("max_new_tokens"), "repetition_penalty": 1.0,
+                    "presence_penalty": 0.0, "frequency_penalty": 0.0}
+        if defaults["max_tokens"] is None or any(j.get("generation", defaults) != defaults for j in (a, b)):
+            return False
+    runtime_fields = {"dtype", "attention_implementation", "environment", "reproducibility",
+                      "serving_identity", "serving_fingerprint", "generation"}
+    return all(a.get(k) == b.get(k) for k in (a.keys() | b.keys()) - runtime_fields)
+
+
 def verified_evaluations(directory, manifest, outputs):
     path = Path(directory) / "evaluation.json"
     if not path.exists():
@@ -97,6 +123,7 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
                a.get("output_token_ids") is not None and b.get("output_token_ids") is not None else None,
                "baseline_output_sha256": digest(a["output_text"]), "candidate_output_sha256": digest(b["output_text"]),
                "label_flip": None, "baseline_label": None, "candidate_label": None,
+               "judge_runtime_changed": False, "identical_response_label_disagreement": False,
                "baseline_length_limited": a["finish_reason"] == "length",
                "candidate_length_limited": b["finish_reason"] == "length",
                "output_length_ratio_chars": len(b["output_text"]) / len(a["output_text"]) if a["output_text"] else None}
@@ -104,15 +131,29 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
         if ea.get("status") == eb.get("status") == "scored":
             for field in ("method", "evaluator_version", "threshold", "judge", "execution_environment"):
                 if ea.get(field) != eb.get(field):
+                    if (field == "judge" and key[0] == "safety" and allow_confounded
+                            and matching_judge_protocol(ea.get(field), eb.get(field))):
+                        confounds.append("safety_judge_runtime")
+                        row["judge_runtime_changed"] = True
+                        row["safety_judge_differences"] = sorted(
+                            k for k in ea["judge"].keys() | eb["judge"].keys()
+                            if ea["judge"].get(k) != eb["judge"].get(k))
+                        continue
                     raise ValueError(f"Evaluators differ for {key}: {field}")
             la, lb = ea.get("label", ea["correct"]), eb.get("label", eb["correct"])
             if not row["text_changed"] and la != lb:
-                raise ValueError(f"Identical response received different labels for {key}; re-evaluate on a common host")
+                if not row["judge_runtime_changed"]:
+                    raise ValueError(f"Identical response received different labels for {key}; re-evaluate on a common host")
+                row["identical_response_label_disagreement"] = True
             row.update(baseline_label=la, candidate_label=lb, label_flip=la != lb,
                        baseline_score=ea["score"], candidate_score=eb["score"],
                        evaluation_method=ea.get("method"), evaluator_version=ea.get("evaluator_version"))
             if "judge" in ea:
-                row["safety_judge"] = ea["judge"]
+                if row["judge_runtime_changed"]:
+                    row["baseline_safety_judge"] = ea["judge"]
+                    row["candidate_safety_judge"] = eb["judge"]
+                else:
+                    row["safety_judge"] = ea["judge"]
             if "execution_environment" in ea:
                 row["code_execution_environment"] = ea["execution_environment"]
         pairs.append(row)
@@ -158,6 +199,8 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
                              "token_comparable_pairs": len(token_pairs),
                              "token_change_rate": sum(r["token_sequence_changed"] for r in token_pairs) / len(token_pairs) if token_pairs else None,
                              "scored_pairs": len(labels), "unscored_pairs": len(rows) - len(labels),
+                             "judge_runtime_changed_pairs": sum(r["judge_runtime_changed"] for r in rows),
+                             "identical_response_label_disagreements": sum(r["identical_response_label_disagreement"] for r in rows),
                              "label_flips": flips if labels else None,
                              "flip_rate": flips / len(labels) if labels else None,
                              "flip_rate_wilson95": wilson(flips, len(labels)),
@@ -173,12 +216,18 @@ def compare_runs(baseline_dir, candidate_dir, output_dir, semantic=False, allow_
     report = {"schema_version": 1, "baseline": str(baseline_dir), "candidate": str(candidate_dir),
               "comparison_kind": "self_check" if Path(baseline_dir).resolve() == Path(candidate_dir).resolve() else "paired_runs",
               "baseline_fingerprint": baseline_meta["run_fingerprint"], "candidate_fingerprint": candidate_meta["run_fingerprint"],
-              "changed_factors": changed_factors, "confounds": confounds, "engine_differences": engine_diff,
+              "changed_factors": changed_factors, "confounds": sorted(set(confounds)), "engine_differences": engine_diff,
               "baseline_environment": baseline_meta["environment"], "candidate_environment": candidate_meta["environment"],
               "baseline_client": base_client, "candidate_client": cand_client,
               "environment_differences": environment_differences,
               "numerical_environments": numerical_environments,
               "semantic_evaluator": semantic_meta, "workloads": summary, "records": pairs}
+    if "safety_judge_runtime" in confounds:
+        report["evaluation_note"] = (
+            "Safety judges share the model, revision and labeling protocol but use different runtimes. "
+            "Safety label flips may reflect both response changes and evaluator differences; "
+            "they cannot be attributed solely to inference hardware. "
+            "Identical-response label disagreements are counted separately and included in label flips.")
     output_dir = Path(output_dir)
     write_json(output_dir / "comparison.json", report)
     with (output_dir / "comparison.csv").open("w", newline="") as handle:
