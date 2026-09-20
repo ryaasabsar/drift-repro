@@ -144,7 +144,7 @@ bash scripts/investigate.sh compare-captures \
   --output results/investigations/mi210-a100/reference-tensor-differences.json
 ```
 
-Captures preserve model/revision, input tokens, original tensor representations, raw storage bits, and float32-expanded values. Comparison validates provenance and reports bitwise equality and numerical errors. Raw-logit arrays end in `_logits`; `__bits` arrays are storage only and are compared bitwise. Direct vLLM layer/kernel instrumentation remains follow-up work; do not claim a serving-kernel cause from this separate reference model alone.
+Captures preserve model/revision, input tokens, original tensor representations, raw storage bits, and float32-expanded values. Comparison validates provenance and reports bitwise equality and numerical errors. Raw-logit arrays end in `_logits`; `__bits` arrays are storage only and are compared bitwise. For direct vLLM worker instrumentation and captured-operation microbenchmarks, use the [causal investigation workflow](causal-investigation.md). Do not claim a serving-kernel cause from this separate reference model alone.
 
 **6. Optional synthetic precision microbenchmarks**
 

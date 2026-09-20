@@ -509,6 +509,8 @@ def main(argv=None):
     p.add_argument('--output', required=True)
     from .investigation_probes import add_parsers, dispatch
     add_parsers(sub)
+    from . import causal
+    causal.add_parsers(sub)
     args = parser.parse_args(argv)
     from .credentials import load_credentials
     from .common import local_environment
@@ -525,6 +527,8 @@ def main(argv=None):
         result = evaluate(args.roots)
     elif args.command == 'report':
         result = report(args.bundle, args.runs, args.output)
+    elif args.command in causal.COMMANDS:
+        result = causal.dispatch(args)
     else:
         result = dispatch(args)
     import json
