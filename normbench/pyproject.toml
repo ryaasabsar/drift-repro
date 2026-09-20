@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "normbench"
+version = "0.1.0"
+description = "Standalone cross-accelerator gated RMSNorm numerical benchmark"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24,<3"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+normbench = "normbench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["normbench*"]
+
+[tool.setuptools.package-data]
+normbench = ["fixtures/gated_norm/*.json", "fixtures/gated_norm/*.npz", "fixtures/gated_norm/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
