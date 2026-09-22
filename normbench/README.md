@@ -10,6 +10,9 @@ Copy this entire directory into its own repository or onto another machine.
 The Python package, launcher, tests, and approximately 20 MB of numeric fixtures
 are all included here. Results and compiler caches stay outside version control.
 
+For the next A100–MI210 experiment, use the [sigmoid/rsqrt intervention guide](INTERVENTIONS.md).
+It provides four measured variants, unchanged-value controls, and compiled-kernel exports.
+
 ## Environment
 
 Activate an existing environment for the hardware you will use:

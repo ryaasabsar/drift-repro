@@ -8,6 +8,9 @@ Usage:
   bash run.sh a100|mi210|p150b|nvidia|amd|tenstorrent|cpu [run options]
   bash run.sh compare LEFT RIGHT --output DIR
   bash run.sh prepare [--inputs x-w-z.npz] --output FIXTURE_DIR
+  bash run.sh intervene --backend nvidia|amd --output DIR
+  bash run.sh compare-interventions LEFT RIGHT --output DIR
+  bash run.sh prepare-intervention A100_RUN MI210_RUN --output BUNDLE_DIR
 
 Activate an environment with NumPy and the selected accelerator runtime first.
 Or set NORMBENCH_PYTHON=/absolute/path/to/python. No model or credentials needed.
@@ -26,7 +29,7 @@ case "$command" in
   mi210|amd) backend=amd ;;
   p150b|tenstorrent) backend=tenstorrent ;;
   cpu) backend=cpu ;;
-  compare|prepare) ;;
+  compare|prepare|intervene|compare-interventions|prepare-intervention) ;;
   *) usage >&2; exit 2 ;;
 esac
 python="${NORMBENCH_PYTHON:-python3}"
@@ -39,7 +42,7 @@ export NORMBENCH_CACHE_DIR="${NORMBENCH_CACHE_DIR:-$root/.cache}"
 export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-$NORMBENCH_CACHE_DIR/triton}"
 export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-$NORMBENCH_CACHE_DIR/torchinductor}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-4}"
-if [[ "$command" == compare || "$command" == prepare ]]; then
+if [[ "$command" == compare || "$command" == prepare || "$command" == intervene || "$command" == compare-interventions || "$command" == prepare-intervention ]]; then
   exec "$python" -m normbench "$command" "$@"
 fi
 exec "$python" -m normbench run --backend "$backend" "$@"

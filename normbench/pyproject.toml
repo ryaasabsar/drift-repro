@@ -21,7 +21,7 @@ where = ["."]
 include = ["normbench*"]
 
 [tool.setuptools.package-data]
-normbench = ["fixtures/gated_norm/*.json", "fixtures/gated_norm/*.npz", "fixtures/gated_norm/*.md"]
+normbench = ["fixtures/*/*.json", "fixtures/*/*.npz", "fixtures/*/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

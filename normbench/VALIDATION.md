@@ -32,3 +32,33 @@ work after moving complete result folders.
 A100, AMD MI210, and Tenstorrent runtime validation remains to be performed on
 those machines. Local repeatability and matching instrumentation do not prove
 cross-device bitwise agreement or identical generated instructions.
+
+## Intervention experiment — 2026-09-22
+
+The sigmoid/rsqrt experiment has 29 passing tests, including rejection of
+different source operands, failed source observer checks, changed bundles,
+changed compiler artifacts, incompatible protocols, and nonrepeatable results.
+Synthetic comparisons verify that resolved and newly introduced differences
+are counted independently and that failed controls invalidate attribution even
+when output differences disappear.
+
+The final local RTX 3060 campaign is
+`results/interventions-rtx3060-validation-v3/`: 96 stage/output records per
+process, three repetitions, and two fresh processes. All recorded tensors
+repeat within and across processes. Each worker exports 16 compiled kernels
+(eight paths with/without diagnostic stores), including IR, PTX and cubin.
+The original kernel and replay bridge reproduce the frozen NVIDIA baseline.
+
+The controls deliberately do **not** all pass. `self_rsqrt` and `self_both`
+change 39,424 `normalized` diagnostic values (maximum 4 FP32 ULP), while their
+native BF16 outputs and other snapshots stay unchanged. This occurs despite
+matching compiled binary hashes. The control differences are retained in
+`control-differences.csv`; shared-rsqrt/shared-both attribution remains false.
+Original/shared-sigmoid controls pass. This is local diagnostic evidence, not
+an A100/MI210 intervention outcome or proof of a specific compiler transformation.
+
+The original CPU CLI also completed a fresh-process regression campaign after
+the shared process runner was extracted. AMD export interfaces were checked
+against Triton 3.4.0 source and tested with fixture objects; actual MI210
+intervention execution remains to be done. A100 intervention execution likewise
+remains to be done on the user's node.

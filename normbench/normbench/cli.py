@@ -283,11 +283,19 @@ def run(args):
                 'control': args.control, 'stages': list(STAGES)}
     plan = {'fixture': str(Path(args.fixture).resolve()), 'backend': args.backend,
             'tt_device_id': args.tt_device_id, 'protocol': protocol}
-    if args.dry_run:
+    return execute_plan(plan, output, args.processes, args.repeats, args.timeout, args.dry_run)
+
+
+def execute_plan(plan, output, processes, repeats, timeout, dry_run=False):
+    """Run either experiment in fresh, bounded worker processes."""
+    require(processes >= 2 and repeats >= 2 and timeout > 0,
+            'Use at least two calls and two fresh processes, with a positive timeout')
+    require(not output.exists(), 'Output exists; select a new --output')
+    if dry_run:
         return {'output': str(output), **plan}
     output.mkdir(parents=True)
-    state = {'status': 'running', 'started_at': now(), 'processes': args.processes, 'protocol': protocol,
-             'backend': args.backend, 'workers': []}
+    state = {'status': 'running', 'started_at': now(), 'processes': processes, 'protocol': plan['protocol'],
+             'backend': plan['backend'], 'workers': []}
     write_json(output / 'campaign.json', state)
     old = signal.getsignal(signal.SIGTERM)
     def interrupted(signum, frame):
@@ -298,17 +306,17 @@ def run(args):
         cache.mkdir(parents=True, exist_ok=True)
         with (cache / 'accelerator.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            for i in range(1, args.processes + 1):
+            for i in range(1, processes + 1):
                 directory = output / f'process-{i:03d}'
                 directory.mkdir()
                 write_json(directory / 'plan.json', {**plan, 'output': str(directory)})
-                print(f'Process {i}/{args.processes}: {directory / "worker.log"}', flush=True)
+                print(f'Process {i}/{processes}: {directory / "worker.log"}', flush=True)
                 with (directory / 'worker.log').open('w') as log:
                     child = subprocess.Popen([sys.executable, '-u', '-m', 'normbench', '_worker',
                                               str(directory / 'plan.json')], stdout=log, stderr=subprocess.STDOUT,
                                              start_new_session=True)
                     try:
-                        deadline, last_notice = time.monotonic() + args.timeout, time.monotonic()
+                        deadline, last_notice = time.monotonic() + timeout, time.monotonic()
                         while child.poll() is None:
                             require(time.monotonic() < deadline, f'Worker timed out; see {directory / "worker.log"}')
                             if time.monotonic() - last_notice >= 15:
@@ -319,6 +327,8 @@ def run(args):
                         meta, _ = load_result(directory)
                         state['workers'].append({'directory': directory.name,
                                                  'repeatable': all(r['repeat_bitwise_equal'] for r in meta['records'].values())})
+                        if 'attribution_controls_pass' in meta:
+                            state['workers'][-1]['attribution_controls_pass'] = meta['attribution_controls_pass']
                     finally:
                         try:
                             os.killpg(child.pid, signal.SIGTERM)
@@ -329,7 +339,7 @@ def run(args):
                             os.killpg(child.pid, signal.SIGKILL)
                             child.wait()
                 write_json(output / 'campaign.json', state)
-            for i in range(2, args.processes + 1):
+            for i in range(2, processes + 1):
                 compared = compare_workers(output / 'process-001', output / f'process-{i:03d}')
                 write_json(output / f'restart-{i:03d}.json', compared)
                 csv_write(output / f'restart-{i:03d}.csv', compared['rows'])
@@ -341,14 +351,23 @@ def run(args):
         signal.signal(signal.SIGTERM, old)
         state['finished_at'] = now()
         write_json(output / 'campaign.json', state)
-    (output / 'README.md').write_text(
-        '# Gated RMSNorm benchmark\n\nCompleted without loading a model.\n\n'
-        'Each `process-*/result.json` contains controls, per-stage repetition hashes and float64 reference errors. '
-        '`reference-errors.csv` is the tabular view; `focus-values.csv` follows the three captured positions through every stage. '
-        '`outputs.npz` contains raw FP32/BF16 output bits. '
-        '`restart-*.json/csv` compares fresh processes.\n\n'
-        'Copy this complete folder for cross-device comparison with `bash run.sh compare LEFT RIGHT --output DIR`. '
-        'A completed run can contain numerical differences or failed observer controls; it is not an automatic correctness pass.\n')
+    if plan['protocol'].get('experiment') == 'interventions-v1':
+        (output / 'README.md').write_text(
+            '# Gated RMSNorm interventions\n\n'
+            'Inspect `process-*/controls.json` before interpreting effects. '
+            '`reference-errors.csv` and `focus-values.csv` accompany raw `outputs.npz`. '
+            '`kernels/` holds compiled code and `source/` the exact Python implementation.\n\n'
+            'Copy this entire folder, then use `bash run.sh compare-interventions LEFT RIGHT --output DIR`. '
+            'A completed run is not proof that observer or intervention controls passed.\n')
+    else:
+        (output / 'README.md').write_text(
+            '# Gated RMSNorm benchmark\n\nCompleted without loading a model.\n\n'
+            'Each `process-*/result.json` contains controls, per-stage repetition hashes and float64 reference errors. '
+            '`reference-errors.csv` is the tabular view; `focus-values.csv` follows the three captured positions through every stage. '
+            '`outputs.npz` contains raw FP32/BF16 output bits. '
+            '`restart-*.json/csv` compares fresh processes.\n\n'
+            'Copy this complete folder for cross-device comparison with `bash run.sh compare LEFT RIGHT --output DIR`. '
+            'A completed run can contain numerical differences or failed observer controls; it is not an automatic correctness pass.\n')
     return {'status': state['status'], 'output': str(output), 'workers': state['workers']}
 
 
@@ -376,16 +395,25 @@ def main():
     p.add_argument('--output', required=True)
     p = sub.add_parser('_worker')
     p.add_argument('plan')
+    from .interventions import add_arguments
+    add_arguments(sub)
     args = parser.parse_args()
     if args.command == '_worker':
-        worker(args.plan)
+        if read_json(args.plan)['protocol'].get('experiment') == 'interventions-v1':
+            from .interventions import worker as intervention_worker
+            intervention_worker(args.plan)
+        else:
+            worker(args.plan)
         return
     if args.command == 'run':
         result = run(args)
     elif args.command == 'compare':
         result = compare_campaigns(args.left, args.right, args.output)
-    else:
+    elif args.command == 'prepare':
         result = make_fixture(args.output, args.inputs, args.epsilon)
+    else:
+        from .interventions import dispatch
+        result = dispatch(args)
     import json
     print(json.dumps(result, indent=2))
 

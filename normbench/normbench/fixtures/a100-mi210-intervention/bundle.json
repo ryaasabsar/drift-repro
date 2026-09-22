@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "experiment": "interventions-v1",
+  "fixture_fingerprint": "c145dd31a7f6aca01c01a0fbc976cb4b72fef07be570e25d1459a85be3e0aff8",
+  "case": {
+    "name": "captured",
+    "kind": "norm",
+    "shape": [
+      1552,
+      128
+    ],
+    "eps": 1e-06,
+    "note": "Original 1552x128 input, including the three differing positions."
+  },
+  "focus_positions": [
+    [
+      761,
+      11
+    ],
+    [
+      1330,
+      36
+    ],
+    [
+      1385,
+      8
+    ]
+  ],
+  "sources": {
+    "nvidia": {
+      "environment": {
+        "backend": "nvidia",
+        "device": "NVIDIA A100-SXM4-40GB",
+        "cuda": "12.8",
+        "hip": null,
+        "packages": {
+          "numpy": "2.2.6",
+          "torch": "2.10.0",
+          "triton": "3.6.0",
+          "vllm": "0.17.1"
+        },
+        "tf32": false,
+        "float32_matmul_precision": "highest",
+        "staged_implementation": "PyTorch eager, one operator per stage",
+        "visibility": {
+          "CUDA_VISIBLE_DEVICES": "2",
+          "ROCR_VISIBLE_DEVICES": "2"
+        }
+      },
+      "worker_fingerprints": [
+        "764fcf379e532d6858d110248c2b6ccdcfd31eadb51c959e53118624cb4c04c9",
+        "18d9a400fd82902772911f6a65fef5a09632a631c1e5f3ffb90db7fa555edea5"
+      ],
+      "implementation_sha256": "c3c1f99032687d93d605cd498585e43adc0367448dd00bb956fd9a7fffb56b29"
+    },
+    "amd": {
+      "environment": {
+        "backend": "amd",
+        "device": "AMD Instinct MI210",
+        "cuda": null,
+        "hip": "7.0.51831-a3e329ad8",
+        "packages": {
+          "numpy": "2.2.6",
+          "torch": "2.9.1+git8907517",
+          "triton": "3.4.0",
+          "vllm": "0.17.1+rocm700"
+        },
+        "tf32": false,
+        "float32_matmul_precision": "highest",
+        "staged_implementation": "PyTorch eager, one operator per stage",
+        "visibility": {
+          "ROCR_VISIBLE_DEVICES": "0"
+        }
+      },
+      "worker_fingerprints": [
+        "798bdeaef9fe53c85f8625bf19643e29acd0ae179e39509cecd8f2c5e3f43729",
+        "4d47304f6a943b29a87896a7280213beb3a03639f5a9ea92d37b56d36b263026"
+      ],
+      "implementation_sha256": "c3c1f99032687d93d605cd498585e43adc0367448dd00bb956fd9a7fffb56b29"
+    }
+  },
+  "source_protocol": {
+    "fixture_fingerprint": "c145dd31a7f6aca01c01a0fbc976cb4b72fef07be570e25d1459a85be3e0aff8",
+    "implementation_sha256": "c3c1f99032687d93d605cd498585e43adc0367448dd00bb956fd9a7fffb56b29",
+    "cases": [
+      "captured",
+      "synthetic-scale-0.5",
+      "synthetic-scale-1",
+      "synthetic-scale-2",
+      "epsilon-dominated",
+      "bf16-midpoints"
+    ],
+    "precisions": [
+      "float32",
+      "bfloat16"
+    ],
+    "repeats": 3,
+    "control": "native",
+    "stages": [
+      "square",
+      "sum_squares",
+      "mean_square",
+      "add_epsilon",
+      "rsqrt",
+      "normalized",
+      "weighted",
+      "sigmoid",
+      "gate",
+      "precast",
+      "output"
+    ]
+  },
+  "arrays_sha256": "ef1c49db534638a46978a589a46fec2f0002b812198f5c0f73b26a190dfe3243",
+  "reference_method": "NumPy float64 rsqrt/sigmoid of exact frozen operands, rounded once to FP32; not an exact-real oracle.",
+  "baseline_differing_elements": 3,
+  "fingerprint": "c9d433b5ea0a07a41b7875dad28ac9044a85a1c26e5ca99b55cbf03e5f0802bd"
+}
