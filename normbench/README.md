@@ -6,6 +6,11 @@ inputs, FP32/BF16 intermediates, raw output bits, and errors against frozen
 float64 references. No model, inference server, credentials, or DriftBench
 installation is required.
 
+For a short GPU example, run `python simple_divergence.py` in your accelerator
+environment. It computes sigmoid and BF16 rounding for the input at `(761, 11)`.
+The reduced kernel may compile differently; `python reproduce_examples.py`
+replays the original full-shape kernels and prints the three recorded examples.
+
 Copy this entire directory into its own repository or onto another machine.
 The Python package, launcher, tests, and approximately 20 MB of numeric fixtures
 are all included here. Results and compiler caches stay outside version control.
@@ -77,6 +82,73 @@ optional adapter targets the vLLM 0.17.1 internal API and records its source has
 other versions may require adapter changes. Use the same control option on
 both hosts. Results from the earlier embedded implementation have a different
 code/protocol fingerprint; generate fresh campaigns with this standalone code.
+
+## Matching the A100 and MI210 software
+
+From the parent repository root, inside an allocated GPU job:
+
+```bash
+# A100 (also usable on the RTX 3060)
+bash normbench/install_matched.sh nvidia
+normbench/.venv-matched-nvidia/bin/python normbench/simple_divergence.py
+
+# MI210
+bash normbench/install_matched.sh amd
+normbench/.venv-matched-amd/bin/python normbench/simple_divergence.py
+```
+
+Both dedicated environments pin Python **3.12.14**, PyTorch **2.9.1**, Triton
+**3.5.1**, NumPy **2.2.6**, and identical versions/hashes of the common Python
+dependencies. NVIDIA uses the CUDA 12.8 wheel; AMD uses the ROCm 6.4 wheel and
+`pytorch-triton-rocm==3.5.1` (which supplies the `triton` module). The two lockfiles
+pin platform wheels and transitive dependencies with SHA256 hashes. They follow
+the [official PyTorch 2.9.1 builds](https://pytorch.org/get-started/previous-versions/#v291).
+
+The installer creates `.venv-matched-nvidia` or `.venv-matched-amd` inside this
+directory. Existing serving environments and node drivers are retained. There
+is no vLLM dependency for this experiment. `--dry-run` prints the plan; `--check`
+rechecks an existing installation. Installation checks package versions, a GPU
+calculation, and compilation/execution of the small Triton example. It saves
+`environment.json` (including the PyTorch commit and compiler) and `installed.txt`
+inside the environment. Preserve these files alongside transferred results.
+
+CUDA 12.8 fits the reported A100 driver 570.195.03. ROCm 6.4 is the userspace
+build offered for official PyTorch 2.9.1; it does not replace `/opt/rocm` on the
+MI210 node. AMD documents [driver/userspace compatibility](https://rocm.docs.amd.com/projects/install-on-linux/en/docs-7.0.0/reference/user-kernel-space-compat-matrix.html).
+The reported HIP 7.0 version alone does not identify the node's kernel driver;
+the GPU checks must pass on the actual allocation. No sudo is required.
+
+For the numerical comparison, use the same repository revision and run:
+
+```bash
+# A100
+NORMBENCH_PYTHON="$PWD/normbench/.venv-matched-nvidia/bin/python" \
+  bash normbench/run.sh a100 --cases captured bf16-midpoints --precisions float32 \
+  --output normbench/results/a100-matched-v1
+
+# MI210
+NORMBENCH_PYTHON="$PWD/normbench/.venv-matched-amd/bin/python" \
+  bash normbench/run.sh mi210 --cases captured bf16-midpoints --precisions float32 \
+  --output normbench/results/mi210-matched-v1
+
+# After transferring both complete result folders to one machine (NumPy only):
+bash normbench/run.sh compare normbench/results/a100-matched-v1 \
+  normbench/results/mi210-matched-v1 --output normbench/results/a100-mi210-matched-v1
+```
+
+Run the same commands in the original environments with distinct output folders
+to obtain software-before/after comparisons using identical benchmark source.
+Changing PyTorch, Triton, and ROCm userspace together tests the software stack;
+it does not isolate Triton's version alone. Matching version numbers still
+leaves different compiler backends, device libraries, drivers, and GPU hardware.
+Record disagreements even when versions match.
+
+Start with these ordinary benchmark runs. The existing intervention bundle
+requires reproducing the **old** baseline; a changed stack may correctly fail
+that control. If new matched baselines pass their controls, use
+`prepare-intervention` to freeze a new shared bundle before rerunning interventions.
+Do not bypass a failed historical-baseline check. The Tenstorrent TTNN stack is
+separate and is not modified by this A100/MI210 installer.
 
 ## What runs
 

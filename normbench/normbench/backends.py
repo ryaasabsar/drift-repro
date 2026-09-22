@@ -11,11 +11,14 @@ from .numeric import require
 
 def packages():
     result = {}
-    for name in ('numpy', 'torch', 'triton', 'vllm', 'ttnn'):
+    for name in ('numpy', 'torch', 'triton', 'pytorch-triton-rocm', 'vllm', 'ttnn'):
         try:
             result[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
             pass
+    # Official ROCm wheels provide the triton module under this distribution.
+    if 'pytorch-triton-rocm' in result and 'triton' not in result:
+        result['triton'] = result['pytorch-triton-rocm']
     return result
 
 
