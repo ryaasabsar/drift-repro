@@ -17,3 +17,6 @@ docs/paper.pdf
 
 .archive/*
 !.archive/checks/
+
+
+doc-refs/

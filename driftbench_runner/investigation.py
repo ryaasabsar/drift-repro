@@ -370,6 +370,24 @@ def evaluate(roots):
     return {'evaluated_trials': len(trials)}
 
 
+def stable_probes(cases, trials):
+    """Keep repeat-1 divergences reproduced across matching sets of >=3 repeats."""
+    groups = defaultdict(list)
+    for _, info, _, outputs in trials:
+        groups[(info['model_key'], info['condition'], info['device'])].append((info['repeat'], outputs))
+    selected = []
+    for case in cases:
+        key = (case['workload'], case['prompt_id'])
+        sides = [groups[(case['model_key'], case['condition'], device)] for device in ('a100', 'mi210')]
+        repeats = [{repeat for repeat, _ in side} for side in sides]
+        if len(repeats[0]) < 3 or repeats[0] != repeats[1]:
+            continue
+        if all(len({(tuple(outputs[key]['output_token_ids']), outputs[key]['finish_reason'])
+                    for _, outputs in side}) == 1 for side in sides):
+            selected.append({**case, 'verified_repeats': sorted(repeats[0])})
+    return selected
+
+
 def report(bundle_dir, roots, output):
     root, bundle = load_bundle(bundle_dir)
     trials = discover_trials(roots, bundle['fingerprint'])
@@ -460,6 +478,9 @@ def report(bundle_dir, roots, output):
     probe = {'schema_version': 1, 'bundle_fingerprint': bundle['fingerprint'], 'cases': probe_cases}
     probe['fingerprint'] = digest(probe)
     write_json(output / 'probe-cases.json', probe)
+    stable = {**probe, 'cases': stable_probes(probe_cases, trials)}
+    stable['fingerprint'] = digest({k: v for k, v in stable.items() if k != 'fingerprint'})
+    write_json(output / 'stable-probe-cases.json', stable)
     result = {'bundle_fingerprint': bundle['fingerprint'], 'trials': len(trials),
               'trial_coverage': [{k: info[k] for k in ('model_key', 'device', 'condition', 'repeat')} for _, info, _, _ in trials],
               'evaluation_complete': all(r['evaluation_complete'] for r in accuracies),
@@ -473,7 +494,10 @@ def report(bundle_dir, roots, output):
         '**A100–MI210 investigation**\n\n'
         f"{len(trials)} completed trials. Evaluation complete: {result['evaluation_complete']}.\n\n"
         '[Accuracy](accuracy.csv) · [Agreement and flip rates](agreement.csv) · '
-        '[First differing tokens](first-divergences.csv) · [Same-prefix probe requests](probe-cases.json)\n\n'
+        '[First differing tokens](first-divergences.csv) · [All probes](probe-cases.json) · '
+        '[Stable probes](stable-probe-cases.json)\n\n'
+        f"Stable probe cases: {len(stable['cases'])}; identical tokens and finish reasons across matching sets of at least three repeats per device. "
+        'An empty stable file can mean insufficient repeat coverage or variable outputs; inspect trial_coverage and agreement.csv.\n\n'
         'Inspect within-device variation before attributing cross-device differences. '
         'Condition-change rows compare controlled interventions; cross-device rows include all repeat combinations. '
         'Trial coverage is explicit in report.json; absent models/conditions are not treated as passing.\n\n'

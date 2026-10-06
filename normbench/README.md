@@ -18,6 +18,12 @@ are all included here. Results and compiler caches stay outside version control.
 For the next A100–MI210 experiment, use the [sigmoid/rsqrt intervention guide](INTERVENTIONS.md).
 It provides four measured variants, unchanged-value controls, and compiled-kernel exports.
 
+For **weeks one and two** (math/code repeats, first-token divergence, and
+operation tracing), use the [existing investigation workflow](../docs/mi210-a100-investigation.md),
+including its Tenstorrent support checklist.
+It requires the parent repository; standalone NormBench covers the subsequent
+operator-level numerical experiments.
+
 ## Environment
 
 Activate an existing environment for the hardware you will use:
