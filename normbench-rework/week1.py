@@ -60,12 +60,15 @@ def generate(args):
     cases = read_jsonl(CASES)
     if args.limit:  # smoke test: the first N cases of each workload
         cases = [c for w in ("code", "math") for c in [c for c in cases if c["workload"] == w][:args.limit]]
+    if args.percent:  # subset: every k-th case of each workload, so it spans the whole benchmark
+        k = max(1, round(100 / args.percent))
+        cases = [c for w in ("code", "math") for c in [c for c in cases if c["workload"] == w][::k]]
     meta_path = out / "meta.json"
     if not meta_path.exists():
         from importlib import metadata
         packages = {d.metadata["Name"]: d.version for d in metadata.distributions() if d.metadata["Name"]}
         meta = {"device": args.device, "repeat": args.repeat, "model": MODEL, "cases_sha256": sha256(CASES),
-                "sampling": SAMPLING, "logprobs": args.logprobs, "token_ids": not args.no_token_ids,
+                "sampling": SAMPLING, "limit": args.limit, "percent": args.percent, "logprobs": args.logprobs, "token_ids": not args.no_token_ids,
                 "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "host": platform.node(),
                 "python": sys.version.split()[0], "packages": dict(sorted(packages.items())),
                 "env": {k: v for k, v in os.environ.items() if k.endswith("VISIBLE_DEVICES") or k.startswith(
@@ -364,6 +367,7 @@ def main():
     g.add_argument("--out", required=True)
     g.add_argument("--url", default="http://127.0.0.1:8001")
     g.add_argument("--limit", type=int, help="smoke test: first N cases per workload")
+    g.add_argument("--percent", type=float, help="subset: every round(100/P)-th case per workload")
     g.add_argument("--logprobs", type=int, default=5, help="top-k log-probs per token; 0 disables")
     g.add_argument("--no-token-ids", action="store_true", help="for servers that cannot return token IDs")
     s = sub.add_parser("score")

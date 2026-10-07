@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Week 1 generation on one accelerator: a fresh vLLM server per repeat, batch size 1.
-#   bash normbench-rework/run.sh a100|mi210|p150b [--repeats 3] [--out DIR] [--limit N] [--port 8001]
+#   bash normbench-rework/run.sh a100|mi210|p150b [--repeats 3] [--out DIR] [--limit N | --percent P] [--port 8001]
 # Override interpreters with SERVER_PYTHON; pass extra vLLM flags with EXTRA_ARGS; LOGPROBS=0 turns log-probs off.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,6 +12,7 @@ while (($#)); do
     --repeats) repeats="$2"; shift 2;;
     --out) out="$2"; shift 2;;
     --limit) limit=(--limit "$2"); shift 2;;
+    --percent) limit=(--percent "$2"); shift 2;;
     --port) port="$2"; shift 2;;
     *) echo "unknown option $1" >&2; exit 2;;
   esac
@@ -88,6 +89,6 @@ for r in $(seq 1 "$repeats"); do
   "$SERVER_PYTHON" "$here/week1.py" generate --device "$device" --repeat "$r" --out "$dir" \
     --url "http://127.0.0.1:$port" "${limit[@]}" "${client[@]}"
   stop_server
-  if ((${#limit[@]} == 0)); then touch "$dir/DONE"; fi  # a --limit smoke test never marks a repeat complete
+  if ((${#limit[@]} == 0)); then touch "$dir/DONE"; fi  # a --limit/--percent run never marks a repeat complete
 done
 echo "done: $out"

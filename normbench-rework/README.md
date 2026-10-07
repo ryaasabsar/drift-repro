@@ -43,8 +43,10 @@ bash normbench-rework/run.sh p150b   # Tenstorrent, uses .venv-tt-vllm (+ activa
 Each writes `normbench-rework/results/<device>/r1..r3/` (outputs, server log,
 exact server command, package versions). The defaults are 3 repeats and port 8001.
 Options: `--repeats N`, `--out DIR`, `--port P`, and `--limit N` for a quick
-smoke test (first N cases of each workload). A smoke test never marks a repeat as done; delete its folder
-before the full run. Override the interpreter with `SERVER_PYTHON=...` and add
+smoke test (first N cases of each workload). `--percent P` runs a spread-out subset
+(every round(100/P)-th case of each workload: 10 → 149 cases, 20 → 297); give it its
+own `--out` folder. Neither marks a repeat as done; delete a smoke folder before the
+full run. Override the interpreter with `SERVER_PYTHON=...` and add
 vLLM flags with `EXTRA_ARGS="..."`. If the pinned weights are already in
 `.cache/huggingface`, the run is offline (Llama is gated). Otherwise log in to
 Hugging Face with approved access first.
